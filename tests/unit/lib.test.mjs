@@ -89,3 +89,27 @@ test('MT.notComputed renders an info banner, not a pass', () => {
   const h = MT.notComputed('Not computed', ['No rows mapped.']);
   assert.ok(h.includes('verdict info') && !h.includes('pos'));
 });
+
+test('MT.readTable normalises decimal-comma and day-first columns and logs them', () => {
+  const csv = 'date;cost;rate\n31/01/2025;1 234,50;4,5%\n01/02/2025;80,25;3,1%\n02/02/2025;12,0;2,0%\n';
+  const t = MT.readTable(csv);
+  assert.deepEqual([...t.rows.map(r => r.date)], ['2025-01-31', '2025-02-01', '2025-02-02']);
+  assert.deepEqual([...t.rows.map(r => MT.num(r.cost))], [1234.5, 80.25, 12]);
+  assert.equal(MT.pctNum(t.rows[0].rate), 0.045);
+  assert.equal(MT.dq.items.length, 3);
+});
+
+test('MT.readTable leaves US columns, text and ambiguous-free ISO dates alone', () => {
+  const t = MT.readTable('date,cost,name\n2025-01-31,"1,234.50",a\n2025-02-01,80.25,b\n');
+  assert.equal(t.rows[0].cost, '1,234.50');
+  assert.equal(t.rows[0].date, '2025-01-31');
+  assert.equal(MT.dq.items.length, 0);
+});
+
+test('MT.guess maps French headers to the English patterns', () => {
+  const cols = ['Campagne', 'Clics plateforme', 'Sessions', 'Dépenses'];
+  assert.equal(MT.guess(cols, /click/i), 'Clics plateforme');
+  assert.equal(MT.guess(cols, /spend|cost/i), 'Dépenses');
+  assert.equal(MT.guess(cols, /campaign|name/i), 'Campagne');
+  assert.equal(MT.guess(['Date', 'Revenus'], /revenue/i), 'Revenus');
+});

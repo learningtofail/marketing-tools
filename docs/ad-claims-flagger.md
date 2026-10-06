@@ -1,4 +1,4 @@
-# Ad Claims Substantiation & Compliance Flagger
+# Ad Claims Flagger
 
 ## What it answers
 

@@ -1,4 +1,4 @@
-# Paid Ad Quality Score & Landing Page Checklist Scorer
+# Ad Copy & Landing Page Readiness Checklist
 
 ## What it answers
 

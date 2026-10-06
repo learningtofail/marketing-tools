@@ -1,0 +1,22 @@
+[
+ {"tool": "promo-capacity-checker", "file": "a_happy_inputs.json", "setup": {"nofile": true},
+  "must": ["$7,339", "1.93x", "78%", "Green: margin and capacity look fine", "Stock was not checked"], "mustnot": ["NaN"]},
+ {"tool": "promo-capacity-checker", "file": "b_messy_inputs.json", "setup": {"nofile": true},
+  "must": ["Not computed: check your inputs", "Discount is 0.15%. If you meant 15%, type 15", "Payment fee is 0.029%"], "mustnot": ["Green:", "stay within"]},
+ {"tool": "promo-capacity-checker", "file": "a_happy_inputs.json", "setup": {"nofile": true, "fields": {"wh": "", "sc": ""}},
+  "must": ["Yellow: incomplete check", "Not checked because the field is blank: shipping capacity, support capacity", "Not checked"], "mustnot": ["Green:", "stay within"]},
+ {"tool": "promo-capacity-checker", "file": "a_happy_inputs.json", "setup": {"nofile": true, "fields": {"price": ""}},
+  "must": ["Not computed: check your inputs", "Regular price is blank or not a number"], "mustnot": ["Warehouse runs", "Yellow:", "Green:"]},
+ {"tool": "promo-capacity-checker", "file": "c_trap_inventory_inputs.json", "setup": {"nofile": true},
+  "must": ["Red: do not launch as planned", "Stock covers 4.5 of 6 promo days", "It runs out on day 5"], "mustnot": ["Green:"]},
+ {"tool": "promo-capacity-checker", "file": "c_trap_inventory_inputs.json", "setup": {"nofile": true, "fields": {"stock": "2400"}},
+  "must": ["Stock cover", "6.0 days"], "mustnot": ["Stock covers"]},
+ {"tool": "promo-capacity-checker", "file": "d_healthcare_inputs.json", "setup": {"nofile": true},
+  "must": ["Red: do not launch as planned", "Order volume is 127% of daily shipping capacity", "6.3 of 6 tickets/day", "appointments per day"], "mustnot": ["Warehouse demand is"]},
+ {"tool": "promo-capacity-checker", "file": "a_happy_inputs.json", "setup": {"nofile": true, "fields": {"disc": "100"}},
+  "must": ["Not computed: check your inputs", "Discount must be"], "mustnot": ["falls 230%"]},
+ {"tool": "promo-capacity-checker", "file": "a_happy_inputs.json", "setup": {"nofile": true, "fields": {"days": "0"}},
+  "must": ["Not computed: check your inputs", "Promo duration (days) must be above 0"], "mustnot": ["destroys"]},
+ {"tool": "promo-capacity-checker", "file": "a_happy_inputs.json", "setup": {"nofile": true, "fields": {"peak": "1.6"}},
+  "must": ["launch-day peak would reach 125%"], "mustnot": []}
+]

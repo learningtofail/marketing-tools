@@ -1,0 +1,18 @@
+{
+  "scenario": "Local services (HVAC tune-up promo). Inventory is not the constraint, technician-jobs per day is. Use units on hand = 1000000 as a workaround.",
+  "fields": {
+    "inv": 1000000,
+    "cap": 40,
+    "safe": 0,
+    "hor": 28,
+    "base": 32,
+    "lift": 40,
+    "ps": 7,
+    "pd": 14,
+    "spend": 600,
+    "cpa": 60,
+    "upo": 1
+  },
+  "purchase_orders": [],
+  "notes": "Shop closes Sundays and techs work 5 days: 40 jobs/day is really 200 jobs/week, not 280. Tool has no weekday capacity, so it cannot see this."
+}

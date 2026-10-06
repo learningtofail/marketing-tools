@@ -26,6 +26,10 @@ CASES = [
     ('gtm-container-auditor', '03-trap-trigger-group-healthcare-booking.json', ['Unused variable'], ['Unused trigger', 'Missing trigger']),
     ('gtm-container-auditor', '04-server-side-container-publisher.json', ['Server-side container'], ['no consent settings.']),
     ('gtm-container-auditor', '05-large-enterprise-retail-container.json', ['34 unused', '185 unused', 'Showing the first 150'], []),
+    ('demand-capacity-guardrail', 'a_happy_inputs.json', ['$2,328', 'Day-1 forecast 332'], ['Day-1 forecast 0'], {'nofile': True, 'jsonfields': True, 'hist': 'a_happy_history.csv', 'po': [(20, 5000)]}),
+    ('demand-capacity-guardrail', 'b_messy_inputs.json', ['History checks', 'not numbers'], ['Day-1 forecast 0'], {'nofile': True, 'jsonfields': True, 'hist': 'b_messy_history.txt'}),
+    ('demand-capacity-guardrail', 'c_trap_inputs.json', ['too few to fit a trend'], ['day 60 forecast 819'], {'nofile': True, 'jsonfields': True, 'hist': 'c1_trap_ramp_history.csv'}),
+    ('demand-capacity-guardrail', 'c_trap_inputs.json', ['zero-sales day', 'stock-outs'], ['Day-1 forecast 0'], {'nofile': True, 'jsonfields': True, 'hist': 'c2_trap_censored_history.csv'}),
 ]
 
 bad = 0
@@ -38,7 +42,12 @@ with sync_playwright() as pw:
         pg.on('pageerror', lambda e: errs.append(str(e)))
         pg.goto('file://' + os.path.join(site, tool + '.html'))
         if setup.get('nofile'):
-            for k, v in json.load(open(os.path.join(SAMPLES, tool, fname))).items():
+            data = json.load(open(os.path.join(SAMPLES, tool, fname)))
+            if setup.get('jsonfields'): data = data['fields']
+            if 'hist' in setup: pg.fill('#hist', open(os.path.join(SAMPLES, tool, setup['hist']), newline='').read())
+            for i, (d, q) in enumerate(setup.get('po', [])):
+                pg.fill('[data-i="%d"][data-k="d"]' % i, str(d)); pg.fill('[data-i="%d"][data-k="q"]' % i, str(q))
+            for k, v in data.items():
                 if k.startswith('_') or k == 'curve_clean' or pg.query_selector('#f_' + k) is None: continue
                 (pg.select_option if k == 'basis' else pg.fill)('#f_' + k, str(v))
             if 'curve' in setup: pg.fill('#f_curve', open(os.path.join(SAMPLES, tool, setup['curve'])).read().strip())

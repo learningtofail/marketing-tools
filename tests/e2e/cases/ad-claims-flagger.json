@@ -1,0 +1,208 @@
+[
+ {
+  "tool": "ad-claims-flagger",
+  "file": "01-ecommerce-headphones-happy-path.json",
+  "must": [
+   "more noise than any other",
+   "half the price",
+   "weekend only"
+  ],
+  "mustnot": [
+   "No risky claim patterns found"
+  ],
+  "setup": {
+   "nofile": true
+  }
+ },
+ {
+  "tool": "ad-claims-flagger",
+  "file": "02-us-supplement-landing-page.json",
+  "must": [
+   "melts belly fat",
+   "doctor-formulated",
+   "No side effects",
+   "refund every penny",
+   "Qualifiers found"
+  ],
+  "mustnot": [
+   "treat\tHealth",
+   "cure\tHealth",
+   "prevent\tHealth"
+  ],
+  "setup": {
+   "nofile": true
+  }
+ },
+ {
+  "tool": "ad-claims-flagger",
+  "file": "03-canada-personal-loan-and-credit-card.json",
+  "must": [
+   "Guaranteed approval",
+   "Pre-approved",
+   "No credit check",
+   "0% interest"
+  ],
+  "mustnot": [
+   "No risky claim patterns found",
+   "No listed claim patterns matched"
+  ],
+  "setup": {
+   "nofile": true
+  }
+ },
+ {
+  "tool": "ad-claims-flagger",
+  "file": "04-canada-auto-dealer-pricing.json",
+  "must": [
+   "from $24,995",
+   "$199 a month",
+   "Lowest prices",
+   "Drip pricing"
+  ],
+  "mustnot": [
+   "No listed claim patterns matched"
+  ],
+  "setup": {
+   "nofile": true
+  }
+ },
+ {
+  "tool": "ad-claims-flagger",
+  "file": "05-eu-uk-travel-offer.json",
+  "must": [
+   "from just £399",
+   "world's favourite",
+   "supplements extra"
+  ],
+  "mustnot": [
+   "No listed claim patterns matched"
+  ],
+  "setup": {
+   "nofile": true
+  }
+ },
+ {
+  "tool": "ad-claims-flagger",
+  "file": "06-quebec-francais-publicite.json",
+  "must": [
+   "French copy",
+   "100 000 clients",
+   "le meilleur",
+   "Cliniquement prouv"
+  ],
+  "mustnot": [
+   "No listed claim patterns matched",
+   "000 clients (x"
+  ],
+  "setup": {
+   "nofile": true
+  }
+ },
+ {
+  "tool": "ad-claims-flagger",
+  "file": "06b-quebec-francais-translation-of-01.json",
+  "must": [
+   "French copy",
+   "numéro un",
+   "Meilleur que"
+  ],
+  "mustnot": [
+   "No listed claim patterns matched"
+  ],
+  "setup": {
+   "nofile": true
+  }
+ },
+ {
+  "tool": "ad-claims-flagger",
+  "file": "07-false-green-unrecognised-claims.json",
+  "must": [
+   "reverses cartilage damage",
+   "Approved by Health Canada",
+   "Satisfaction assured"
+  ],
+  "mustnot": [
+   "No risky claim patterns found"
+  ],
+  "setup": {
+   "nofile": true
+  }
+ },
+ {
+  "tool": "ad-claims-flagger",
+  "file": "07b-false-green-no-patterns-matched.json",
+  "must": [
+   "reverses cartilage damage",
+   "relieves arthritis pain",
+   "Clinical studies show",
+   "Earn 6%"
+  ],
+  "mustnot": [
+   "No risky claim patterns found",
+   "Nothing flagged"
+  ],
+  "setup": {
+   "nofile": true
+  }
+ },
+ {
+  "tool": "ad-claims-flagger",
+  "file": "08-false-positives-benign-copy.json",
+  "must": [
+   "No listed claim patterns matched. This is not a clearance.",
+   "does not mean the copy is clear"
+  ],
+  "mustnot": [
+   "high-risk claim",
+   "Green Bay\tSuperlative",
+   "Item #1\t"
+  ],
+  "setup": {
+   "nofile": true
+  }
+ },
+ {
+  "tool": "ad-claims-flagger",
+  "file": "09-footnote-and-qualifier-bugs.json",
+  "must": [
+   "asterisk marks a claim but no footnote",
+   "asterisk without footnote",
+   "1 flagged phrase in"
+  ],
+  "mustnot": [
+   "Footnote text is present",
+   "1 flagged phrases"
+  ],
+  "setup": {
+   "nofile": true
+  }
+ },
+ {
+  "tool": "ad-claims-flagger",
+  "file": "10-blank.json",
+  "must": [
+   "Paste copy to scan"
+  ],
+  "mustnot": [
+   "No listed claim patterns matched",
+   "No risky claim"
+  ],
+  "setup": {
+   "nofile": true
+  }
+ },
+ {
+  "tool": "ad-claims-flagger",
+  "file": "11-html-paste.json",
+  "must": [
+   "HTML tags and comments were removed"
+  ],
+  "mustnot": [
+   "fastest\tSuperlative",
+   "guaranteed\tGuarantee"
+  ],
+  "setup": {
+   "nofile": true
+  }
+ }
+]

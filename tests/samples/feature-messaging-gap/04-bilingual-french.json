@@ -1,0 +1,4 @@
+{
+ "notes": "- Ajout de l'exportation CSV en masse pour les rapports\n- Nouvelles autorisations par rôle pour les espaces de travail\n- Envoi planifié des rapports vers Slack\n- Authentification à deux facteurs\n- Mode sombre pour le tableau de bord\n",
+ "copy": "Découvrez la version 4.2, notre plus belle mise à jour pour les équipes en croissance. Exportez tous vos rapports en CSV en un clic, pour gagner des heures chaque semaine. Donnez à chaque membre de l'équipe l'accès qu'il lui faut grâce aux rôles par espace de travail. Vos rapports arrivent dans Slack selon l'horaire de votre choix. Protégez chaque connexion avec la double authentification. Vos yeux vous diront merci le soir.\n"
+}

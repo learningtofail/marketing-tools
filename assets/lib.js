@@ -35,7 +35,8 @@ MT.numFmt = values => {
     if (lc >= 0) { const parts = t.split(','); if (parts.length > 2) us++; else if (parts[1].length !== 3) eu++; continue; }
     const parts = t.split('.'); if (parts.length > 2) eu++; else if (parts[1].length !== 3) us++;
   }
-  return eu > us ? 'eu' : 'us';
+  if (eu && us) return 'auto';   // mixed column: decide value by value
+  return eu ? 'eu' : 'us';
 };
 MT.num = (s, fmt) => {
   if (typeof s === 'number') return s; if (s == null) return NaN;

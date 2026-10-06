@@ -113,3 +113,9 @@ test('MT.guess maps French headers to the English patterns', () => {
   assert.equal(MT.guess(cols, /campaign|name/i), 'Campagne');
   assert.equal(MT.guess(['Date', 'Revenus'], /revenue/i), 'Revenus');
 });
+
+test('MT.numFmt: a mixed column falls back to per-value reading', () => {
+  const col = ['$1,234.50', '412,35', '88.20'];
+  assert.equal(MT.numFmt(col), 'auto');
+  assert.deepEqual([...col.map(v => MT.num(v, MT.numFmt(col)))], [1234.5, 412.35, 88.2]);
+});

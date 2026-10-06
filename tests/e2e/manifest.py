@@ -35,6 +35,10 @@ CASES = [
     ('creative-decay-monitor', '02b-control-same-data-clean-iso-dot-decimal.csv', ['Check delivery change', 'Paused 18 days'], ['No usable rows']),
     ('creative-decay-monitor', '03-trap-b2b-linkedin-lowvolume-flat-truth.csv', ['0 burned out, 0 approaching fatigue, 6 healthy'], ['Retire or refresh now']),
     ('creative-decay-monitor', '05-trap-ctr-only-scaling-not-fatigue.csv', ['Check delivery change'], ['Retire or refresh now']),
+    ('experiment-analyzer', '01_happy_ecommerce_checkout_raw.csv', ['+0.57 pp', 'p = 0.018', 'Positive and statistically significant'], [], {'pre': {'#abMetric': 'binary', '#abFmt': 'raw'}, 'btn': '#run'}),
+    ('experiment-analyzer', '04a_messy_travel_booking_binary_raw.csv', ['Variant spellings treated as one group', 'exact copies', 'left out'], ['Holm-adjusted'], {'pre': {'#abMetric': 'binary', '#abFmt': 'raw'}, 'btn': '#run'}),
+    ('experiment-analyzer', '04b_messy_travel_booking_value_raw.csv', ['+1.1% relative', 'counted as zero'], ['-45'], {'pre': {'#abMetric': 'continuous', '#abFmt': 'raw'}, 'btn': '#run'}),
+    ('experiment-analyzer', '05_trap_srm_healthcare_booking_raw.csv', ['Do not act on this result yet', 'Sample ratio mismatch'], ['Positive and statistically significant'], {'pre': {'#abMetric': 'binary', '#abFmt': 'raw'}, 'btn': '#run'}),
 ]
 
 bad = 0
@@ -46,6 +50,7 @@ with sync_playwright() as pw:
         pg = b.new_page(); errs = []
         pg.on('pageerror', lambda e: errs.append(str(e)))
         pg.goto('file://' + os.path.join(site, tool + '.html'))
+        for sel, val in setup.get('pre', {}).items(): pg.select_option(sel, val)
         if setup.get('nofile'):
             data = json.load(open(os.path.join(SAMPLES, tool, fname)))
             if setup.get('jsonfields'): data = data['fields']
@@ -57,13 +62,14 @@ with sync_playwright() as pw:
                 (pg.select_option if k == 'basis' else pg.fill)('#f_' + k, str(v))
             if 'curve' in setup: pg.fill('#f_curve', open(os.path.join(SAMPLES, tool, setup['curve'])).read().strip())
         else:
-            pg.set_input_files('input[type=file]', os.path.join(SAMPLES, tool, fname)); pg.wait_for_timeout(300)
+            pg.set_input_files('input[type=file] >> nth=0', os.path.join(SAMPLES, tool, fname)); pg.wait_for_timeout(300)
         for name, val in setup.get('radio', {}).items(): pg.check('input[name=%s][value=%s]' % (name, val))
         for sel, val in setup.get('selects', {}).items(): pg.select_option(sel, val)
         if 'date' in setup: pg.fill('#pd', setup['date'])
         for fid, val in setup.get('fields', {}).items(): pg.fill('#f_' + fid, val)
-        if pg.query_selector('#go'): pg.click('#go')
-        pg.wait_for_timeout(400)
+        btn = setup.get('btn') or ('#go' if pg.query_selector('#go') else None)
+        if btn: pg.click(btn)
+        pg.wait_for_timeout(1200 if setup.get('btn') else 400)
         text = pg.inner_text('main')
         miss = [m for m in must if m not in text]; hit = [m for m in mustnot if m in text]
         ok = not (miss or hit or errs)

@@ -8,22 +8,31 @@ SAMPLES = os.path.join(HERE, '..', 'samples')
 site = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else 'site')
 only = sys.argv[2] if len(sys.argv) > 2 else None
 
-# tool, file, must contain, must not contain
+# tool, file, must contain, must not contain, optional setup {radio:{name:value}, fields:{id:value}, selects:{selector:value}, date:value}
 CASES = [
     ('traffic-reconciler', '01-happy-ecommerce-ads-vs-ga4.csv', ['display_prospecting', 'Investigate'], ['No usable rows']),
     ('traffic-reconciler', '02-messy-quebec-bilingual-lead-gen.csv', ['4 judged campaigns', 'added together', 'not numbers', 'Data quality'], ['No usable rows', 'Total\t']),
     ('traffic-reconciler', '06-edge-tiny-volume-and-zero-clicks.csv', ['Too few clicks', 'zero clicks', 'Above range', 'dup_tag_campaign'], ['Sessions are 87% of platform clicks; 1 of']),
+    ('brand-incrementality', '01_happy_b2b_saas_brand_pause.csv', ['34% incremental', 'Welch p <0.0001'], ['p 1.000'], {'radio': {'mode': 'test'}, 'date': '2026-03-30', 'fields': {'spend': '15000', 'clicks': '6270', 'cvr': '6', 'val': '320'}}),
+    ('brand-incrementality', '02_messy_local_services_brand_pause.csv', ['repeated day row'], ['0% to -'], {'radio': {'mode': 'test'}, 'date': '2026-05-25', 'fields': {'spend': '30000', 'clicks': '16200', 'cvr': '9', 'val': '90'}, 'selects': {'#cp': 'Brand Ads Clicks', '#co': 'Brand SEO clicks'}}),
+    ('brand-incrementality', '03_trap_promo_confound_apparel_brand_pause.csv', ['Inconclusive'], ['loses $8,500'], {'radio': {'mode': 'test'}, 'date': '2026-09-28', 'fields': {'spend': '8500', 'clicks': '9000', 'cvr': '4.5', 'val': '38'}}),
+    ('brand-incrementality', '04_trap_partial_pause_travel_brand.csv', ['partial pause', '9% incremental'], [], {'radio': {'mode': 'test'}, 'date': '2026-02-23', 'fields': {'spend': '18000', 'clicks': '11300', 'cvr': '7', 'val': '55'}}),
 ]
 
 bad = 0
 with sync_playwright() as pw:
     b = pw.chromium.launch(executable_path=os.environ['PW_CHROMIUM_PATH']) if os.environ.get('PW_CHROMIUM_PATH') else pw.chromium.launch()
-    for tool, fname, must, mustnot in CASES:
+    for case in CASES:
+        tool, fname, must, mustnot = case[:4]; setup = case[4] if len(case) > 4 else {}
         if only and tool != only: continue
         pg = b.new_page(); errs = []
         pg.on('pageerror', lambda e: errs.append(str(e)))
         pg.goto('file://' + os.path.join(site, tool + '.html'))
         pg.set_input_files('input[type=file]', os.path.join(SAMPLES, tool, fname)); pg.wait_for_timeout(300)
+        for name, val in setup.get('radio', {}).items(): pg.check('input[name=%s][value=%s]' % (name, val))
+        for sel, val in setup.get('selects', {}).items(): pg.select_option(sel, val)
+        if 'date' in setup: pg.fill('#pd', setup['date'])
+        for fid, val in setup.get('fields', {}).items(): pg.fill('#f_' + fid, val)
         pg.click('#go'); pg.wait_for_timeout(400)
         text = pg.inner_text('main')
         miss = [m for m in must if m not in text]; hit = [m for m in mustnot if m in text]

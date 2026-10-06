@@ -1,0 +1,94 @@
+[
+ {
+  "tool": "brand-incrementality",
+  "file": "01_happy_b2b_saas_brand_pause.csv",
+  "must": [
+   "34% incremental",
+   "Welch p <0.0001"
+  ],
+  "mustnot": [
+   "p 1.000"
+  ],
+  "setup": {
+   "radio": {
+    "mode": "test"
+   },
+   "date": "2026-03-30",
+   "fields": {
+    "spend": "15000",
+    "clicks": "6270",
+    "cvr": "6",
+    "val": "320"
+   }
+  }
+ },
+ {
+  "tool": "brand-incrementality",
+  "file": "02_messy_local_services_brand_pause.csv",
+  "must": [
+   "repeated day row"
+  ],
+  "mustnot": [
+   "0% to -"
+  ],
+  "setup": {
+   "radio": {
+    "mode": "test"
+   },
+   "date": "2026-05-25",
+   "fields": {
+    "spend": "30000",
+    "clicks": "16200",
+    "cvr": "9",
+    "val": "90"
+   },
+   "selects": {
+    "#cp": "Brand Ads Clicks",
+    "#co": "Brand SEO clicks"
+   }
+  }
+ },
+ {
+  "tool": "brand-incrementality",
+  "file": "03_trap_promo_confound_apparel_brand_pause.csv",
+  "must": [
+   "Inconclusive"
+  ],
+  "mustnot": [
+   "loses $8,500"
+  ],
+  "setup": {
+   "radio": {
+    "mode": "test"
+   },
+   "date": "2026-09-28",
+   "fields": {
+    "spend": "8500",
+    "clicks": "9000",
+    "cvr": "4.5",
+    "val": "38"
+   }
+  }
+ },
+ {
+  "tool": "brand-incrementality",
+  "file": "04_trap_partial_pause_travel_brand.csv",
+  "must": [
+   "partial pause",
+   "9% incremental"
+  ],
+  "mustnot": [],
+  "setup": {
+   "radio": {
+    "mode": "test"
+   },
+   "date": "2026-02-23",
+   "fields": {
+    "spend": "18000",
+    "clicks": "11300",
+    "cvr": "7",
+    "val": "55"
+   }
+  }
+ }
+]

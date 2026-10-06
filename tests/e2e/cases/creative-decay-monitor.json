@@ -1,0 +1,54 @@
+[
+ {
+  "tool": "creative-decay-monitor",
+  "file": "01-happy-dtc-skincare-meta.csv",
+  "must": [
+   "1 burned out, 1 approaching fatigue, 1 healthy",
+   "Insufficient data"
+  ],
+  "mustnot": []
+ },
+ {
+  "tool": "creative-decay-monitor",
+  "file": "02-messy-quebec-travel-fr-semicolon.csv",
+  "must": [
+   "Check delivery change",
+   "Paused 18 days",
+   "Data quality"
+  ],
+  "mustnot": [
+   "No usable rows"
+  ]
+ },
+ {
+  "tool": "creative-decay-monitor",
+  "file": "02b-control-same-data-clean-iso-dot-decimal.csv",
+  "must": [
+   "Check delivery change",
+   "Paused 18 days"
+  ],
+  "mustnot": [
+   "No usable rows"
+  ]
+ },
+ {
+  "tool": "creative-decay-monitor",
+  "file": "03-trap-b2b-linkedin-lowvolume-flat-truth.csv",
+  "must": [
+   "0 burned out, 0 approaching fatigue, 6 healthy"
+  ],
+  "mustnot": [
+   "Retire or refresh now"
+  ]
+ },
+ {
+  "tool": "creative-decay-monitor",
+  "file": "05-trap-ctr-only-scaling-not-fatigue.csv",
+  "must": [
+   "Check delivery change"
+  ],
+  "mustnot": [
+   "Retire or refresh now"
+  ]
+ }
+]

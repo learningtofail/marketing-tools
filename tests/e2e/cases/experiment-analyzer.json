@@ -1,0 +1,74 @@
+[
+ {
+  "tool": "experiment-analyzer",
+  "file": "01_happy_ecommerce_checkout_raw.csv",
+  "must": [
+   "+0.57 pp",
+   "p = 0.018",
+   "Positive and statistically significant"
+  ],
+  "mustnot": [],
+  "setup": {
+   "pre": {
+    "#abMetric": "binary",
+    "#abFmt": "raw"
+   },
+   "btn": "#run"
+  }
+ },
+ {
+  "tool": "experiment-analyzer",
+  "file": "04a_messy_travel_booking_binary_raw.csv",
+  "must": [
+   "Variant spellings treated as one group",
+   "exact copies",
+   "left out"
+  ],
+  "mustnot": [
+   "Holm-adjusted"
+  ],
+  "setup": {
+   "pre": {
+    "#abMetric": "binary",
+    "#abFmt": "raw"
+   },
+   "btn": "#run"
+  }
+ },
+ {
+  "tool": "experiment-analyzer",
+  "file": "04b_messy_travel_booking_value_raw.csv",
+  "must": [
+   "+1.1% relative",
+   "counted as zero"
+  ],
+  "mustnot": [
+   "-45"
+  ],
+  "setup": {
+   "pre": {
+    "#abMetric": "continuous",
+    "#abFmt": "raw"
+   },
+   "btn": "#run"
+  }
+ },
+ {
+  "tool": "experiment-analyzer",
+  "file": "05_trap_srm_healthcare_booking_raw.csv",
+  "must": [
+   "Do not act on this result yet",
+   "Sample ratio mismatch"
+  ],
+  "mustnot": [
+   "Positive and statistically significant"
+  ],
+  "setup": {
+   "pre": {
+    "#abMetric": "binary",
+    "#abFmt": "raw"
+   },
+   "btn": "#run"
+  }
+ }
+]

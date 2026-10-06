@@ -1,0 +1,16 @@
+[
+ {"tool": "scv-gap-calculator", "file": "a_happy_inputs.json", "setup": {"nofile": true},
+  "must": ["53% of customer journeys are fragmented", "$9,932", "$8,762 to $11,178", "not statistical confidence", "which comes from CRM hygiene", "Privacy.", "Double the effective cookie life"], "mustnot": ["80% range:", "Reduces expiry share", "NaN"]},
+ {"tool": "scv-gap-calculator", "file": "b_messy_inputs.json", "setup": {"nofile": true, "fields": {"dup": "6.6"}},
+  "must": ["$214,259", "say which match key you used"], "mustnot": []},
+ {"tool": "scv-gap-calculator", "file": "b_messy_inputs.json", "setup": {"nofile": true},
+  "must": ["$301,126"], "mustnot": []},
+ {"tool": "scv-gap-calculator", "file": "b_messy_inputs.json", "setup": {"nofile": true, "fields": {"dup": "29"}},
+  "must": ["$555,629"], "mustnot": []},
+ {"tool": "scv-gap-calculator", "file": "c_trap_consent_inputs.json", "setup": {"nofile": true},
+  "must": ["Web match rate (65%) is above the consent share (35%)", "Visitors who decline tracking are not waste", "Quebec Law 25"], "mustnot": []},
+ {"tool": "scv-gap-calculator", "file": "a_happy_inputs.json", "setup": {"nofile": true, "fields": {"aud": ""}},
+  "must": ["Not computed: check your inputs", "Real customers and prospects is blank"], "mustnot": ["Estimated gap cost", "fragmented in this model"]},
+ {"tool": "scv-gap-calculator", "file": "a_happy_inputs.json", "setup": {"nofile": true, "fields": {"dup": "0.06"}},
+  "must": ["Duplicate rate is 0.06%. If you meant 6%, type 6"], "mustnot": []}
+]

@@ -21,6 +21,11 @@ CASES = [
     ('cac-payback-modeler', 'b-subscription-box-messy.json', ['13.1 months', '1.72'], [], {'nofile': True, 'curve': 'curve-paste-tab-separated-percent.txt'}),
     ('cac-payback-modeler', 'b-subscription-box-messy.json', ['13.1 months', 'read as fractions'], [], {'nofile': True, 'curve': 'curve-fractions-wrong-units.txt'}),
     ('cac-payback-modeler', 'c-marketplace-organic-mix-trap.json', ['6.1 months', '5.4 months'], ['Cash payback in 1.5 months'], {'nofile': True, 'fields': {'pcust': '18'}}),
+    ('gtm-container-auditor', '01-ecommerce-clean-web-container.json', ['health 100', 'No issues found'], ['Missing trigger']),
+    ('gtm-container-auditor', '02-b2b-saas-messy-agency-container.json', ['Disabled built-in variable', 'DLV - not defined', 'Duplicate tags'], ['{{firstName}}', 'Missing trigger']),
+    ('gtm-container-auditor', '03-trap-trigger-group-healthcare-booking.json', ['Unused variable'], ['Unused trigger', 'Missing trigger']),
+    ('gtm-container-auditor', '04-server-side-container-publisher.json', ['Server-side container'], ['no consent settings.']),
+    ('gtm-container-auditor', '05-large-enterprise-retail-container.json', ['34 unused', '185 unused', 'Showing the first 150'], []),
 ]
 
 bad = 0

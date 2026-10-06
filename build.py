@@ -19,6 +19,7 @@ import markdown
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(ROOT, 'site')
 CFG = json.load(open(os.path.join(ROOT, 'site.config.json'), encoding='utf-8'))
+if 'MT_HOME_URL' in os.environ: CFG['home_url'] = os.environ['MT_HOME_URL']  # '' hides the home links (vendored copies)
 GROUPS = [
  ('Experimentation & Measurement', ['experiment-analyzer','brand-incrementality','attribution-window-normalizer','traffic-reconciler']),
  ('Unit Economics & Planning', ['cac-payback-modeler','affiliate-margin-calculator','affiliate-concentration-analyzer','promo-capacity-checker','demand-capacity-guardrail','seo-equivalent-value']),

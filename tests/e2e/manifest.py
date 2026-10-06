@@ -30,6 +30,11 @@ CASES = [
     ('demand-capacity-guardrail', 'b_messy_inputs.json', ['History checks', 'not numbers'], ['Day-1 forecast 0'], {'nofile': True, 'jsonfields': True, 'hist': 'b_messy_history.txt'}),
     ('demand-capacity-guardrail', 'c_trap_inputs.json', ['too few to fit a trend'], ['day 60 forecast 819'], {'nofile': True, 'jsonfields': True, 'hist': 'c1_trap_ramp_history.csv'}),
     ('demand-capacity-guardrail', 'c_trap_inputs.json', ['zero-sales day', 'stock-outs'], ['Day-1 forecast 0'], {'nofile': True, 'jsonfields': True, 'hist': 'c2_trap_censored_history.csv'}),
+    ('creative-decay-monitor', '01-happy-dtc-skincare-meta.csv', ['1 burned out, 1 approaching fatigue, 1 healthy', 'Insufficient data'], []),
+    ('creative-decay-monitor', '02-messy-quebec-travel-fr-semicolon.csv', ['Check delivery change', 'Paused 18 days', 'Data quality'], ['No usable rows']),
+    ('creative-decay-monitor', '02b-control-same-data-clean-iso-dot-decimal.csv', ['Check delivery change', 'Paused 18 days'], ['No usable rows']),
+    ('creative-decay-monitor', '03-trap-b2b-linkedin-lowvolume-flat-truth.csv', ['0 burned out, 0 approaching fatigue, 6 healthy'], ['Retire or refresh now']),
+    ('creative-decay-monitor', '05-trap-ctr-only-scaling-not-fatigue.csv', ['Check delivery change'], ['Retire or refresh now']),
 ]
 
 bad = 0

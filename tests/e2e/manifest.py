@@ -17,6 +17,10 @@ CASES = [
     ('brand-incrementality', '02_messy_local_services_brand_pause.csv', ['repeated day row'], ['0% to -'], {'radio': {'mode': 'test'}, 'date': '2026-05-25', 'fields': {'spend': '30000', 'clicks': '16200', 'cvr': '9', 'val': '90'}, 'selects': {'#cp': 'Brand Ads Clicks', '#co': 'Brand SEO clicks'}}),
     ('brand-incrementality', '03_trap_promo_confound_apparel_brand_pause.csv', ['Inconclusive'], ['loses $8,500'], {'radio': {'mode': 'test'}, 'date': '2026-09-28', 'fields': {'spend': '8500', 'clicks': '9000', 'cvr': '4.5', 'val': '38'}}),
     ('brand-incrementality', '04_trap_partial_pause_travel_brand.csv', ['partial pause', '9% incremental'], [], {'radio': {'mode': 'test'}, 'date': '2026-02-23', 'fields': {'spend': '18000', 'clicks': '11300', 'cvr': '7', 'val': '55'}}),
+    ('cac-payback-modeler', 'a-saas-happy.json', ['Cash payback in 6.2 months', '4.10'], ['Not paid back', '0.00x'], {'nofile': True}),
+    ('cac-payback-modeler', 'b-subscription-box-messy.json', ['13.1 months', '1.72'], [], {'nofile': True, 'curve': 'curve-paste-tab-separated-percent.txt'}),
+    ('cac-payback-modeler', 'b-subscription-box-messy.json', ['13.1 months', 'read as fractions'], [], {'nofile': True, 'curve': 'curve-fractions-wrong-units.txt'}),
+    ('cac-payback-modeler', 'c-marketplace-organic-mix-trap.json', ['6.1 months', '5.4 months'], ['Cash payback in 1.5 months'], {'nofile': True, 'fields': {'pcust': '18'}}),
 ]
 
 bad = 0
@@ -28,12 +32,19 @@ with sync_playwright() as pw:
         pg = b.new_page(); errs = []
         pg.on('pageerror', lambda e: errs.append(str(e)))
         pg.goto('file://' + os.path.join(site, tool + '.html'))
-        pg.set_input_files('input[type=file]', os.path.join(SAMPLES, tool, fname)); pg.wait_for_timeout(300)
+        if setup.get('nofile'):
+            for k, v in json.load(open(os.path.join(SAMPLES, tool, fname))).items():
+                if k.startswith('_') or k == 'curve_clean' or pg.query_selector('#f_' + k) is None: continue
+                (pg.select_option if k == 'basis' else pg.fill)('#f_' + k, str(v))
+            if 'curve' in setup: pg.fill('#f_curve', open(os.path.join(SAMPLES, tool, setup['curve'])).read().strip())
+        else:
+            pg.set_input_files('input[type=file]', os.path.join(SAMPLES, tool, fname)); pg.wait_for_timeout(300)
         for name, val in setup.get('radio', {}).items(): pg.check('input[name=%s][value=%s]' % (name, val))
         for sel, val in setup.get('selects', {}).items(): pg.select_option(sel, val)
         if 'date' in setup: pg.fill('#pd', setup['date'])
         for fid, val in setup.get('fields', {}).items(): pg.fill('#f_' + fid, val)
-        pg.click('#go'); pg.wait_for_timeout(400)
+        if pg.query_selector('#go'): pg.click('#go')
+        pg.wait_for_timeout(400)
         text = pg.inner_text('main')
         miss = [m for m in must if m not in text]; hit = [m for m in mustnot if m in text]
         ok = not (miss or hit or errs)

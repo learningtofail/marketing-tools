@@ -12,7 +12,7 @@
 (function () {
 const $ = MT.$, F = MT.fmt, C = MT.chart;
 MT.fields($('#fCost'), [
-  { id: 'cust', label: 'New customers acquired', value: 400, min: 1 }, { id: 'paid', label: 'Paid media spend ($)', value: 60000 },
+  { id: 'cust', label: 'New customers acquired (all channels)', value: 400, min: 1 }, { id: 'pcust', label: 'Of those, customers from paid media (optional)', value: '', hint: 'Leave blank if all customers came from paid. Used for paid-media CAC.' }, { id: 'paid', label: 'Paid media spend ($)', value: 60000 },
   { id: 'agency', label: 'Agency and creative fees ($)', value: 12000 }, { id: 'mkt', label: 'Marketing headcount, fully loaded ($)', value: 30000 },
   { id: 'sales', label: 'Sales headcount, fully loaded ($)', value: 25000 }, { id: 'tools', label: 'Tools, software and other overhead ($)', value: 6000 }
 ], 'g2');
@@ -23,16 +23,37 @@ MT.fields($('#fUnit'), [
   { id: 'hor', label: 'Horizon (months)', value: 36, min: 6, max: 120 },
   { id: 'curve', label: 'Custom retention curve (optional)', type: 'text', value: '', placeholder: 'Month-by-month % still active, e.g. 100,92,86,81', hint: 'Month 1 first. Overrides churn.' }
 ], 'g2');
-function retention(h) { const cur = String(MT.$('#f_curve').value).split(/[,\s]+/).map(Number).filter(x => isFinite(x)); const ch = MT.f('churn') / 100; const r = []; for (let t = 1; t <= h; t++) { if (cur.length) { const v = t <= cur.length ? cur[t - 1] / 100 : (cur.length > 1 ? cur[cur.length - 1] / 100 * Math.pow(cur[cur.length - 1] / cur[Math.max(0, cur.length - 2)] || 1, t - cur.length) : 0); r.push(Math.max(0, v)); } else r.push(Math.pow(1 - ch, t - 1)); } return r; }
+function parseCurve() {
+  const raw = String(MT.$('#f_curve').value).split(/[,;\t\n]+|\s+/).map(x => x.trim()).filter(x => x !== ''), vals = raw.map(x => MT.num(x)).filter(x => isFinite(x));
+  if (!vals.length) return { cur: [], msg: '' };
+  const frac = vals.every(v => v <= 1.0001) && vals[0] > 0 && !raw.some(x => /%/.test(x)), cur = frac ? vals.map(v => v * 100) : vals;
+  let msg = frac ? 'Curve values were all 1 or below, so they were read as fractions (0.71 = 71%).' : '';
+  if (cur[0] < 50) msg += ' The first curve value is below 50%. Month 1 is usually 100%; check the order.';
+  if (cur.some((v, i) => i && v > cur[i - 1] + 0.01)) msg += ' The curve rises somewhere (customers returning). Values beyond the last month are held flat or declining, never rising.';
+  return { cur, msg: msg.trim() };
+}
+function retention(h) {
+  const { cur } = parseCurve(), ch = MT.f('churn') / 100, r = [];
+  for (let t = 1; t <= h; t++) {
+    if (!cur.length) { r.push(Math.pow(1 - ch, t - 1)); continue; }
+    if (t <= cur.length) { r.push(Math.max(0, cur[t - 1] / 100)); continue; }
+    const last = cur[cur.length - 1] / 100, prev = cur.length > 1 ? cur[cur.length - 2] / 100 : last, rate = prev > 0 ? Math.min(1, last / prev) : 1;
+    r.push(Math.max(0, last * Math.pow(rate, t - cur.length)));
+  }
+  return r;
+}
 function payback(cac, m, ret, d) { let cum = 0; const curve = []; let pb = null; for (let t = 0; t < ret.length; t++) { const df = Math.pow(1 + d, -(t + 1) / 12); const add = ret[t] * m * df; const prev = cum; cum += add; curve.push(cum); if (pb == null && cum >= cac) pb = t + (cac - prev) / add; } return { pb, curve, ltv: cum }; }
 function run() {
-  const N = MT.f('cust'), paid = MT.f('paid'), total = paid + MT.f('agency') + MT.f('mkt') + MT.f('sales') + MT.f('tools'), blended = paid / N, full = total / N;
+  const N = MT.f('cust'), paid = MT.f('paid'), total = paid + MT.f('agency') + MT.f('mkt') + MT.f('sales') + MT.f('tools'), PN = isFinite(MT.f('pcust')) && MT.f('pcust') > 0 ? Math.min(MT.f('pcust'), N) : N, blended = paid / PN, full = total / N;
   const H = Math.round(MT.f('hor')) || 36, d = MT.f('disc') / 100, arpu = MT.f('arpu'), gm = 1 - MT.f('cogs') / 100, m = arpu * gm - MT.f('var'), cac = MT.$('#f_basis').value === 'paid' ? blended : full;
   if (!(N > 0) || !isFinite(m)) { $('#out').innerHTML = MT.note('Enter customers acquired and unit economics.'); return; }
   const ret = retention(H), pb = payback(cac, m, ret, d), ltv = pb.ltv, ltvCac = ltv / cac, gmPct = m / arpu, ch = MT.f('churn') / 100;
   const simple = ch > 0 ? m / ch : NaN;
-  let h = MT.verdict(pb.pb == null ? 'neg' : pb.pb <= 12 ? 'pos' : pb.pb <= 18 ? 'neu' : 'neg', pb.pb == null ? `Not paid back within ${H} months` : `Cash payback in ${pb.pb.toFixed(1)} months`, `${MT.$('#f_basis').value === 'paid' ? 'Paid-only' : 'Fully loaded'} CAC of ${F.money(cac, 0)} against ${F.money(m, 2)} monthly contribution per active customer. LTV:CAC over ${H} months is ${ltvCac.toFixed(2)}.`);
-  h += MT.stats([['Blended CAC (paid only)', F.money(blended, 0), F.money(paid, 0) + ' / ' + F.int(N)], ['Fully loaded CAC', F.money(full, 0), 'incl. fees, headcount, tools'], ['Loading gap', F.spct(full / blended - 1, 0), 'fully loaded vs paid-only'], ['Contribution per customer-month', F.money(m, 2), F.pct(gmPct, 1) + ' margin'], [`LTV (${H} mo, contribution)`, F.money(ltv, 0), isFinite(simple) ? 'Formula m/churn: ' + F.money(simple, 0) : ''], ['LTV:CAC', ltvCac.toFixed(2) + 'x', ltvCac >= 3 ? 'above the 3x rule of thumb' : 'below 3x', ltvCac >= 3 ? 'good' : ltvCac >= 1.5 ? 'warn' : 'bad']]);
+  const pbFull = payback(full, m, ret, d), pbPaid = payback(blended, m, ret, d), both = `Payback on fully loaded CAC: ${pbFull.pb == null ? 'not within ' + H + ' months' : pbFull.pb.toFixed(1) + ' months'}. On paid-media CAC only: ${pbPaid.pb == null ? 'not within ' + H + ' months' : pbPaid.pb.toFixed(1) + ' months'}.`, cm = parseCurve().msg;
+  let h = MT.verdict(pb.pb == null ? 'neg' : pb.pb <= 12 ? 'pos' : pb.pb <= 18 ? 'neu' : 'neg', pb.pb == null ? `Not paid back within ${H} months` : `Cash payback in ${pb.pb.toFixed(1)} months`, `${MT.$('#f_basis').value === 'paid' ? 'Paid-only' : 'Fully loaded'} CAC of ${F.money(cac, 0)} against ${F.money(m, 2)} monthly contribution per active customer. LTV:CAC over ${H} months is ${ltvCac.toFixed(2)}. ${both}${MT.$('#f_basis').value === 'paid' ? ' Paid-only CAC leaves out headcount, agency and tools, so it flatters payback; use it for channel comparison, not for the finance view.' : ''}`);
+  if (cm) h += MT.note(MT.esc(cm), 'warn');
+  if (parseCurve().cur.length) h += MT.note('The sensitivity table below varies a constant monthly churn and does not use your curve, so its middle cell will not match the headline.');
+  h += MT.stats([['Paid-media CAC', F.money(blended, 0), F.money(paid, 0) + ' / ' + F.int(PN) + (PN < N ? ' paid customers' : ' customers')], ['Fully loaded CAC', F.money(full, 0), 'incl. fees, headcount, tools'], ['Loading gap', F.spct(full / blended - 1, 0), 'fully loaded vs paid-only'], ['Contribution per customer-month', F.money(m, 2), F.pct(gmPct, 1) + ' margin'], [`LTV (${H} mo, contribution)`, F.money(ltv, 0), isFinite(simple) ? 'Formula m/churn: ' + F.money(simple, 0) : ''], ['LTV:CAC', ltvCac.toFixed(2) + 'x', ltvCac >= 3 ? 'above the 3x rule of thumb' : 'below 3x', ltvCac >= 3 ? 'good' : ltvCac >= 1.5 ? 'warn' : 'bad']]);
   h += '<div class="card"><div id="cc"></div></div>';
   // sensitivity
   const base = MT.f('churn'), churns = [0.5, 0.75, 1, 1.5, 2].map(x => +(base * x).toFixed(2)), gms = [-10, -5, 0, 5, 10].map(x => Math.max(1, Math.min(99, gm * 100 + x)));

@@ -1,0 +1,70 @@
+<!--META {"title":"Search Query Report Bleed & Negative Keyword Extractor","short":"Turn a search terms report into ready-to-paste exact and phrase negative keywords with the spend they stop.","desc":"Upload a Google or Microsoft Ads search terms report. The tool finds wasted spend from broad and phrase match expansion, mines n-gram patterns, and outputs negative keyword lists by match type.","tag":"Paid search"} -->
+<div class="card">
+  <h3>Search terms report</h3>
+  <p class="sub">Export from Google Ads (Campaigns, Insights and reports, Search terms) or Microsoft Ads. Header lines above the column names are skipped automatically.</p>
+  <div id="drop"></div>
+  <div class="field" style="margin-top:.6rem"><label for="paste">Or paste CSV</label><textarea id="paste" placeholder="Search term,Clicks,Impr.,Cost,Conversions"></textarea></div>
+  <div class="row3"><div class="field"><label for="ct">Search term column</label><select id="ct"></select></div><div class="field"><label for="cc">Clicks</label><select id="cc"></select></div><div class="field"><label for="ci">Impressions</label><select id="ci"></select></div></div>
+  <div class="row3"><div class="field"><label for="cs">Cost</label><select id="cs"></select></div><div class="field"><label for="cv">Conversions</label><select id="cv"></select></div><div class="field"><label>N-gram sizes</label><div class="checks"><label><input type="checkbox" class="ng" value="1" checked> 1 word</label><label><input type="checkbox" class="ng" value="2" checked> 2 words</label><label><input type="checkbox" class="ng" value="3" checked> 3 words</label></div></div></div>
+</div>
+<div class="card"><h3>Thresholds</h3><div id="f"></div>
+  <div class="row2"><div class="field"><label for="prot">Protected terms (never negate)</label><textarea id="prot" placeholder="Your product and brand words, one per line or comma separated"></textarea></div><div class="field"><label for="mods">Irrelevant intent modifiers</label><textarea id="mods">free
+jobs
+job
+careers
+salary
+diy
+torrent
+download
+pdf
+template
+wiki
+definition
+meaning
+repair
+manual
+login</textarea></div></div>
+  <div class="actions"><button class="btn btn-primary" id="go" type="button">Find negatives</button><button class="btn btn-secondary btn-sm" id="smp" type="button">Load sample</button></div><div class="err" id="err"></div></div>
+<div id="out"></div>
+<script>
+(function () {
+const $ = MT.$, F = MT.fmt, S = MT.stat, C = MT.chart; let tab = null;
+MT.fields($('#f'), [{ id: 'spend', label: 'Exact negative: zero conversions and spend at least ($)', value: 50 }, { id: 'clk', label: '...or clicks at least', value: 30 }, { id: 'ctr', label: 'Low CTR below (%)', value: 1 }, { id: 'imp', label: '...with impressions at least', value: 500 }, { id: 'ngc', label: 'Phrase negative: n-gram cost at least ($)', value: 40 }, { id: 'ngt', label: '...seen in at least this many distinct terms', value: 2 }], 'g3');
+function load(t) { tab = MT.readTable(t, /search term|query|keyword/i); const c = tab.cols; MT.fillSelect($('#ct'), c, /search term|query|keyword/i); MT.fillSelect($('#cc'), c, /^clicks?$/i); MT.fillSelect($('#ci'), c, /impr/i); MT.fillSelect($('#cs'), c, /^cost|spend/i); MT.fillSelect($('#cv'), c, /^conv(ersions?)?\.?$|conversions/i); }
+MT.dropzone($('#drop'), t => { $('#paste').value = t; load(t); }); $('#paste').addEventListener('input', MT.debounce(() => load($('#paste').value), 250));
+$('#smp').addEventListener('click', () => { const r = MT.rng(11), rows = [['Search term', 'Clicks', 'Impr.', 'Cost', 'Conversions']]; const good = ['crm software', 'best crm for small business', 'crm software pricing', 'sales crm tool', 'crm for startups'], bad = ['free crm software download', 'crm jobs', 'crm salary', 'crm training pdf', 'what is crm definition', 'crm login', 'free crm template excel', 'crm developer jobs remote', 'crm repair manual', 'hubspot login page']; good.forEach(g => { const c = 30 + Math.round(r.u() * 60); rows.push([g, c, c * 12, '$' + (c * 3.1).toFixed(2), Math.round(c * 0.09)]); }); bad.forEach(g => { const c = 10 + Math.round(r.u() * 50); rows.push([g, c, c * 20, '$' + (c * 2.6).toFixed(2), 0]); }); for (let i = 0; i < 25; i++) { const c = 1 + Math.round(r.u() * 8); rows.push(['crm query ' + (i + 1), c, c * 15, '$' + (c * 2.9).toFixed(2), r.u() < 0.2 ? 1 : 0]); } const t = MT.toCSV(rows); $('#paste').value = t; load(t); MT.$('#prot').value = 'crm'; run(); });
+const words = s => (s.toLowerCase().match(/[a-z0-9à-ÿ'\-]+/g) || []);
+function run() {
+  $('#err').textContent = ''; if (!tab) { $('#err').textContent = 'Paste or upload a report first.'; return; }
+  const t = $('#ct').value, cc = $('#cc').value, ci = $('#ci').value, cs = $('#cs').value, cv = $('#cv').value;
+  const rows = tab.rows.map(r => ({ term: String(r[t]).trim().toLowerCase(), clicks: MT.num(r[cc]) || 0, impr: MT.num(r[ci]) || 0, cost: MT.num(r[cs]) || 0, conv: MT.num(r[cv]) || 0 })).filter(r => r.term && !/^total/.test(r.term) && !r.term.startsWith('--'));
+  if (!rows.length) { $('#err').textContent = 'No rows parsed. Check the columns.'; return; }
+  const prot = MT.$('#prot').value.toLowerCase().split(/[\n,]+/).map(s => s.trim()).filter(Boolean), isProt = term => prot.some(p => term.includes(p) && p.split(/\s+/).every(w => words(term).includes(w) || term.includes(p)));
+  const totalCost = S.sum(rows.map(r => r.cost)), sp = MT.f('spend'), mc = MT.f('clk'), ctrMax = MT.f('ctr') / 100, mi = MT.f('imp');
+  const mods = MT.$('#mods').value.toLowerCase().split(/[\n,]+/).map(s => s.trim()).filter(Boolean), sizes = MT.$$('.ng:checked').map(x => +x.value);
+  // phrase negatives via n-grams and modifiers
+  const ng = new Map(); rows.forEach(r => { const w = words(r.term); sizes.forEach(n => { const seen = new Set(); for (let i = 0; i + n <= w.length; i++) { const g = w.slice(i, i + n).join(' '); if (seen.has(g)) continue; seen.add(g); if (n === 1 && (MT.stop.has(g) || g.length < 3)) continue; const o = ng.get(g) || { g, n, cost: 0, clicks: 0, conv: 0, terms: 0 }; o.cost += r.cost; o.clicks += r.clicks; o.conv += r.conv; o.terms++; ng.set(g, o); } }); });
+  const phrases = []; const ngc = MT.f('ngc'), ngt = MT.f('ngt');
+  Array.from(ng.values()).filter(o => o.conv === 0 && o.cost >= ngc && o.terms >= ngt && !prot.some(p => o.g.includes(p) || p.includes(o.g))).forEach(o => phrases.push({ g: o.g, cost: o.cost, clicks: o.clicks, terms: o.terms, why: 'Zero conversions across ' + o.terms + ' terms' }));
+  mods.forEach(m => { const hit = rows.filter(r => words(r.term).includes(m) || (m.includes(' ') && r.term.includes(m))); const c = S.sum(hit.map(r => r.cost)); if (hit.length && !prot.some(p => m.includes(p)) && !phrases.some(p => p.g === m)) phrases.push({ g: m, cost: c, clicks: S.sum(hit.map(r => r.clicks)), terms: hit.length, why: 'Irrelevant intent modifier' }); });
+  // prune sub-ngrams dominated by larger ones with the same cost is skipped; sort by cost
+  phrases.sort((a, b) => b.cost - a.cost);
+  const covered = term => phrases.some(p => (' ' + words(term).join(' ') + ' ').includes(' ' + p.g + ' '));
+  const exact = rows.filter(r => r.conv === 0 && ((r.cost >= sp || r.clicks >= mc) || (r.impr >= mi && r.impr > 0 && r.clicks / r.impr < ctrMax)) && !isProt(r.term)).sort((a, b) => b.cost - a.cost), exactOnly = exact.filter(r => !covered(r.term));
+  const phraseSave = S.sum(rows.filter(r => covered(r.term) && r.conv === 0).map(r => r.cost)), exactSave = S.sum(exactOnly.map(r => r.cost)), save = phraseSave + exactSave;
+  const zero = S.sum(rows.filter(r => r.conv === 0).map(r => r.cost));
+  let h = MT.verdict(save / totalCost > 0.15 ? 'neg' : 'neu', `${F.money(save, 0)} of spend is addressable (${F.pct(save / Math.max(totalCost, 1), 1)} of ${F.money(totalCost, 0)})`, `${phrases.length} phrase negatives and ${exactOnly.length} exact negatives found. Zero-conversion terms account for ${F.money(zero, 0)} in total; this list targets the part you can safely cut.`);
+  h += MT.stats([['Total spend', F.money(totalCost, 0), F.int(rows.length) + ' search terms'], ['Zero-conversion spend', F.money(zero, 0), F.pct(zero / Math.max(totalCost, 1), 0) + ' of spend'], ['Phrase negatives', String(phrases.length), F.money(phraseSave, 0) + ' saved'], ['Exact negatives', String(exactOnly.length), F.money(exactSave, 0) + ' saved']]);
+  const pl = phrases.map(p => '"' + p.g + '"'), el = exactOnly.map(r => '[' + r.term + ']');
+  h += '<div class="card"><h3>Phrase-match negatives</h3>' + (phrases.length ? MT.tbl(['Negative', 'Cost', 'Clicks', 'Terms', 'Reason'], phrases.slice(0, 40).map(p => ['"' + p.g + '"', F.money(p.cost, 2), F.int(p.clicks), p.terms, p.why]), { num: [1, 2, 3] }) + '<div class="actions"><button class="btn btn-secondary btn-sm" data-c="p" type="button">Copy phrase list</button></div>' : '<p class="muted">None found at these thresholds.</p>') + '</div>';
+  h += '<div class="card"><h3>Exact-match negatives</h3><p class="sub">Terms not already covered by a phrase negative above.</p>' + (exactOnly.length ? MT.tbl(['Negative', 'Cost', 'Clicks', 'Impressions', 'Conversions'], exactOnly.slice(0, 60).map(r => ['[' + r.term + ']', F.money(r.cost, 2), F.int(r.clicks), F.int(r.impr), r.conv]), { num: [1, 2, 3, 4] }) + '<div class="actions"><button class="btn btn-secondary btn-sm" data-c="e" type="button">Copy exact list</button><button class="btn btn-secondary btn-sm" data-c="a" type="button">Copy all</button><button class="btn btn-secondary btn-sm" id="dl" type="button">Download CSV</button></div>' : '<p class="muted">None found at these thresholds.</p>') + '</div>';
+  if (prot.length) h += MT.note('<b>Protected terms</b> (' + MT.esc(prot.join(', ')) + ') were excluded from all suggestions.');
+  h += '<div class="card"><div id="c1"></div></div>'; $('#out').innerHTML = h;
+  C.hbars($('#c1'), { title: 'Cost by suggested phrase negative, top 12', cats: phrases.slice(0, 12).map(p => '"' + p.g + '"'), values: phrases.slice(0, 12).map(p => p.cost), fmt: v => F.money(v, 0) });
+  const lists = { p: pl.join('\n'), e: el.join('\n'), a: pl.concat(el).join('\n') };
+  MT.$$('[data-c]').forEach(b => b.addEventListener('click', e => MT.copy(lists[b.dataset.c], e.target)));
+  const dl = $('#dl'); if (dl) dl.addEventListener('click', () => MT.download('negative-keywords.csv', MT.toCSV([['keyword', 'match_type', 'wasted_cost']].concat(phrases.map(p => [p.g, 'phrase', p.cost.toFixed(2)]), exactOnly.map(r => [r.term, 'exact', r.cost.toFixed(2)]))), 'text/csv'));
+}
+$('#go').addEventListener('click', run);
+})();
+</script>

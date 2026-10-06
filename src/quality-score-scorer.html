@@ -1,0 +1,72 @@
+<!--META {"title":"Paid Ad Quality Score & Landing Page Checklist Scorer","short":"Score ad relevance, expected CTR and landing page experience with a weighted checklist and text-match checks.","desc":"Enter a keyword, ad copy and landing page text. The tool checks keyword presence, message match and page-experience factors, then estimates each Quality Score component and lists the fixes that matter most.","tag":"Paid search"} -->
+<div class="split">
+<div>
+  <div class="card"><h3>Keyword and ad</h3>
+    <div class="field"><label for="kw">Target keyword</label><input id="kw" type="text" placeholder="waterproof trail running shoes"></div>
+    <div class="field"><label for="hl">Ad headlines (one per line)</label><textarea id="hl" rows="4"></textarea></div>
+    <div class="field"><label for="ds">Ad descriptions (one per line)</label><textarea id="ds" rows="3"></textarea></div>
+    <div class="field"><label for="url">Display path / final URL</label><input id="url" type="text"></div>
+  </div>
+  <div class="card"><h3>Landing page</h3>
+    <div class="field"><label for="ptitle">Page title</label><input id="ptitle" type="text"></div>
+    <div class="field"><label for="ph1">H1 heading</label><input id="ph1" type="text"></div>
+    <div class="field"><label for="pbody">Visible page text (first screen and body)</label><textarea id="pbody" rows="6"></textarea></div>
+  </div>
+  <div class="card"><h3>Page experience checklist</h3><div id="chk" class="checks stack"></div>
+    <div class="actions"><button class="btn btn-secondary btn-sm" id="smp" type="button">Load sample</button></div></div>
+</div>
+<div id="out" class="out"></div>
+</div>
+<script>
+(function () {
+const $ = MT.$, F = MT.fmt;
+const CH = [
+  ['ctr', 'Ad includes a clear offer, price or differentiator', 3, 'Add a concrete offer or proof point to a headline.'],
+  ['ctr', 'Ad has a strong call to action', 2, 'End a description with a specific action verb.'],
+  ['ctr', 'Ad uses ad assets (sitelinks, callouts, structured snippets)', 3, 'Add sitelinks, callouts and structured snippets to lift CTR.'],
+  ['ctr', 'Keyword is in a match type that fits its intent (not broad on a head term)', 2, 'Tighten match types on high-volume terms.'],
+  ['lp', 'Page loads in under 3 seconds on mobile', 4, 'Compress images, defer scripts and fix Core Web Vitals.'],
+  ['lp', 'Page is mobile responsive with tap-friendly buttons', 3, 'Fix mobile layout and tap targets.'],
+  ['lp', 'Call to action is visible above the fold', 3, 'Move the primary button above the fold.'],
+  ['lp', 'Page has clear navigation, privacy policy and contact details', 2, 'Add privacy, contact and about links.'],
+  ['lp', 'Page uses HTTPS with no intrusive pop-ups or interstitials', 3, 'Remove interstitials and mixed content.'],
+  ['lp', 'Page offers original, useful content about the searched topic', 3, 'Add specific, original product or service detail.'],
+  ['rel', 'Ad group holds a tight theme (under 15 closely related keywords)', 3, 'Split the ad group into tighter themes.']
+];
+function words(s) { return MT.tokens(String(s || '')).map(MT.stem); }
+function cover(kwT, text) { if (!kwT.length) return 0; const t = new Set(words(text)); return kwT.filter(w => t.has(w)).length / kwT.length; }
+function has(kw, text) { return String(text).toLowerCase().includes(kw.toLowerCase().trim()); }
+function draw() { $('#chk').innerHTML = CH.map((c, i) => `<label><input type="checkbox" id="chk_${i}" data-i="${i}"> ${MT.esc(c[1])}</label>`).join(''); }
+function lvl(s) { return s >= 0.7 ? ['Above average', 'good'] : s >= 0.4 ? ['Average', 'warn'] : ['Below average', 'bad']; }
+function run() {
+  const kw = $('#kw').value.trim(); if (!kw) { $('#out').innerHTML = '<div class="card"><p class="muted">Enter a keyword to score.</p></div>'; return; }
+  const kwT = words(kw), hls = $('#hl').value.split('\n').map(s => s.trim()).filter(Boolean), dss = $('#ds').value.split('\n').map(s => s.trim()).filter(Boolean), ad = hls.concat(dss).join(' '), url = $('#url').value, title = $('#ptitle').value, h1 = $('#ph1').value, body = $('#pbody').value, first = body.slice(0, 600);
+  const ck = Array.from(document.querySelectorAll('#chk input')).map(i => i.checked), test = [];
+  const T = (key, ok, pts, label, fix) => test.push({ key, ok, pts, label, fix });
+  T('rel', hls.some(h => has(kw, h)), 4, 'Exact keyword appears in a headline', 'Put the full keyword phrase in at least one headline.');
+  T('rel', cover(kwT, hls.join(' ')) >= 0.99, 2, 'All keyword words appear across headlines', 'Include every keyword word in the headlines.');
+  T('rel', dss.some(d => cover(kwT, d) >= 0.5), 2, 'Keyword terms appear in a description', 'Mention the keyword in a description line.');
+  T('rel', hls.length >= 8, 1, 'At least 8 headlines for responsive ads', 'Supply 8 to 15 varied headlines.');
+  T('lp', cover(kwT, h1) >= 0.99, 4, 'H1 contains all keyword words', 'Rewrite the H1 to include the keyword.');
+  T('lp', cover(kwT, title) >= 0.99, 3, 'Page title contains all keyword words', 'Add the keyword to the page title.');
+  T('lp', cover(kwT, first) >= 0.66, 3, 'Keyword terms appear in the first screen of text', 'Repeat the searched topic in the opening copy.');
+  T('lp', cover(kwT, body) >= 0.99 && body.split(/\s+/).length >= 150, 2, 'Body has 150+ words covering the keyword', 'Add substantive body copy on the searched topic.');
+  T('lp', kwT.some(w => words(url).includes(w)), 1, 'URL or display path contains a keyword term', 'Use a relevant display path and URL slug.');
+  T('ad', (function () { const a = new Set(words(ad)), b = new Set(words(h1 + ' ' + title + ' ' + first)); if (!a.size || !b.size) return false; let n = 0; a.forEach(w => b.has(w) && n++); return n / a.size >= 0.35; })(), 4, 'Ad message and page copy overlap (message match)', 'Reuse the ad offer and wording on the landing page.');
+  CH.forEach((c, i) => T(c[0], ck[i], c[2], c[1], c[3]));
+  const sc = k => { const t = test.filter(x => x.key === k || (k === 'rel' && x.key === 'ad')), tot = MT.stat.sum(t.map(x => x.pts)); return MT.stat.sum(t.filter(x => x.ok).map(x => x.pts)) / tot; };
+  const rel = sc('rel'), ctrRaw = test.filter(x => x.key === 'ctr'), ctr = MT.stat.sum(ctrRaw.filter(x => x.ok).map(x => x.pts)) / MT.stat.sum(ctrRaw.map(x => x.pts)) * 0.75 + 0.25 * (hls.length >= 8 ? 1 : 0.3), lp = sc('lp');
+  const est = Math.max(1, Math.min(10, Math.round(1 + 9 * (0.39 * ctr + 0.3 * rel + 0.31 * lp))));
+  const comp = [['Expected CTR', ctr], ['Ad relevance', rel], ['Landing page experience', lp]];
+  let h = MT.verdict(est >= 7 ? 'pos' : est >= 5 ? 'neu' : 'neg', `Estimated Quality Score ${est} out of 10`, `Weakest area: ${comp.slice().sort((a, b) => a[1] - b[1])[0][0]}. This is a checklist estimate, not the score Google assigns. Google computes Quality Score from live auction data.`);
+  h += MT.stats(comp.map(c => { const l = lvl(c[1]); return [c[0], l[0], Math.round(c[1] * 100) + ' of 100', l[1]]; }));
+  const fails = test.filter(x => !x.ok).sort((a, b) => b.pts - a.pts);
+  h += '<div class="card"><h3>Fix these first</h3>' + (fails.length ? MT.tbl(['Fix', 'Area', 'Weight'], fails.slice(0, 10).map(x => [x.fix, { ctr: 'Expected CTR', rel: 'Ad relevance', ad: 'Ad relevance', lp: 'Landing page' }[x.key], x.pts]), { num: [2] }) : '<p class="muted">Every check passes.</p>') + '</div>';
+  h += '<div class="card"><h3>All checks</h3>' + MT.tbl(['Check', 'Result'], test.map(x => [x.label, { h: MT.tag(x.ok ? 'Pass' : 'Fail', x.ok ? 'good' : 'bad') }])) + '</div>';
+  h += MT.note('<b>Scoring.</b> Text checks compare stemmed keyword words against headlines, descriptions, title, H1, opening copy and URL. Manual checks rely on your ticks. Weights follow Google\'s published guidance that ad relevance, expected CTR and landing page experience drive Quality Score, with page speed and message match carrying the most weight in practice. Use the output as a pre-launch audit.');
+  $('#out').innerHTML = h;
+}
+$('#smp').addEventListener('click', () => { $('#kw').value = 'waterproof trail running shoes'; $('#hl').value = 'Waterproof Trail Running Shoes\nFree Returns for 60 Days\nGrip Built for Wet Trails\nShop Trail Shoes Today'; $('#ds').value = 'Stay dry on every trail. Lightweight waterproof shoes with rugged grip. Order today.'; $('#url').value = 'shop.example.com/trail-shoes'; $('#ptitle').value = 'Waterproof Trail Running Shoes | Free 60 Day Returns'; $('#ph1').value = 'Waterproof Trail Running Shoes'; $('#pbody').value = 'Stay dry on every trail with our lightweight waterproof trail running shoes. Rugged grip, breathable membranes and free returns for 60 days. ' + 'Our shoes are tested on wet rock, mud and roots by trail runners across the country. '.repeat(3); document.querySelectorAll('#chk input').forEach((c, i) => c.checked = [0, 1, 4, 5, 6, 7, 8, 9].includes(i)); run(); });
+draw(); MT.live(document.querySelector('.split'), run);
+})();
+</script>

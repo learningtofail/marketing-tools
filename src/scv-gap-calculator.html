@@ -1,0 +1,43 @@
+<!--META {"title":"Single Customer View Gap Calculator","short":"Turn identity fragmentation into fragmented-journey share, ghost users and wasted ad spend, with a confidence range.","desc":"Enter audience size, cookie lifetime, cross-device behavior and match rates between CRM, ESP and web analytics. A Monte Carlo model projects unstitched journeys, ghost users, duplicate lead waste and the ad spend lost to untracked paths.","tag":"Data governance"} -->
+<div class="split">
+<div>
+  <div class="card"><h3>Audience and behavior</h3><div id="f1"></div></div>
+  <div class="card"><h3>Identity match rates</h3><div id="f2"></div></div>
+  <div class="card"><h3>Money</h3><div id="f3"></div>
+    <div class="field"><label for="unc">Input uncertainty (plus or minus, %)</label><input id="unc" type="range" min="0" max="40" value="15"><span class="hint" id="uncv">15%</span></div>
+    <div class="actions"><button class="btn btn-secondary btn-sm" id="rerun" type="button">Rerun simulation</button></div></div>
+</div>
+<div id="out" class="out"></div>
+</div>
+<script>
+(function () {
+const $ = MT.$, F = MT.fmt, S = MT.stat, C = MT.chart; let seed = 42;
+MT.fields($('#f1'), [{ id: 'aud', label: 'Real customers and prospects in scope', value: 250000 }, { id: 'cookie', label: 'Effective cookie lifetime (days)', value: 14, hint: 'Safari ITP caps script-set cookies at 7 days; 24 hours after a click from a tracker-flagged domain.' }, { id: 'gap', label: 'Average days between visits', value: 9 }, { id: 'multi', label: 'Users on 2 or more devices (%)', value: 45 }, { id: 'dev', label: 'Average devices for multi-device users', value: 2.4 }, { id: 'spm', label: 'Sessions per active user per month', value: 3.2 }], 'g2');
+MT.fields($('#f2'), [{ id: 'web', label: 'Web sessions matched to a CRM ID (%)', value: 28, hint: 'Share of sessions with a login, form fill or email click ID.' }, { id: 'esp', label: 'CRM to ESP match rate (%)', value: 92 }, { id: 'dup', label: 'CRM duplicate contact rate (%)', value: 11 }], 'g2');
+MT.fields($('#f3'), [{ id: 'spend', label: 'Monthly ad spend ($)', value: 180000 }, { id: 'dep', label: 'Spend that depends on identity (%)', value: 45, hint: 'Retargeting, lookalikes, frequency caps, CRM audiences, attribution-based bidding.' }, { id: 'red', label: 'Share of fragmented spend that is redundant (%)', value: 35 }, { id: 'cpl', label: 'Cost to acquire one lead ($)', value: 38 }, { id: 'leads', label: 'New leads per month', value: 4200 }, { id: 'cpc', label: 'Cost per contact per month in ESP ($)', value: 0.02 }], 'g2');
+function tri(r, v, u) { return v * (1 + u * (2 * r.u() - 1)); }
+function clampP(x) { return Math.min(0.999, Math.max(0.001, x)); }
+function run() {
+  const u = +$('#unc').value / 100; $('#uncv').textContent = Math.round(u * 100) + '%'; const p = {}; ['aud', 'cookie', 'gap', 'multi', 'dev', 'spm', 'web', 'esp', 'dup', 'spend', 'dep', 'red', 'cpl', 'leads', 'cpc'].forEach(k => p[k] = MT.f(k));
+  const N = 4000, r = MT.rng(seed), frag = [], ghost = [], waste = [], dupW = [], adW = [], unstitched = [];
+  for (let i = 0; i < N; i++) {
+    const cookie = Math.max(1, tri(r, p.cookie, u)), gap = Math.max(1, tri(r, p.gap, u)), multi = clampP(tri(r, p.multi / 100, u)), dev = Math.max(1, tri(r, p.dev, u)), web = clampP(tri(r, p.web / 100, u)), dup = clampP(tri(r, p.dup / 100, u)), spend = tri(r, p.spend, u * 0.3), dep = clampP(tri(r, p.dep / 100, u)), red = clampP(tri(r, p.red / 100, u)), spm = Math.max(1, tri(r, p.spm, u));
+    const pExpire = Math.exp(-cookie / gap), pFrag = 1 - (1 - multi * (1 - web)) * (1 - pExpire * (1 - web)), cookiesPerUser = (1 - multi) * 1 + multi * dev, resets = Math.max(0, spm - 1) * pExpire * (1 - web);
+    const idsPerUser = cookiesPerUser + resets, ghosts = p.aud * (idsPerUser - 1) * (1 - web * 0.6), dupWaste = dup * p.leads * tri(r, p.cpl, u) + dup * p.aud * tri(r, p.cpc, u), adWaste = spend * dep * pFrag * red;
+    frag.push(pFrag); ghost.push(ghosts); dupW.push(dupWaste); adW.push(adWaste); waste.push(dupWaste + adWaste); unstitched.push(pFrag * spm * p.aud);
+  }
+  const q = (a, x) => S.quantile(a, x), m = a => S.mean(a), ci = (a, f) => `${f(q(a, 0.1))} to ${f(q(a, 0.9))}`;
+  const fr = m(frag), gh = m(ghost), tot = m(waste);
+  let h = MT.verdict(fr > 0.4 ? 'neg' : 'neu', `${F.pct(fr, 0)} of customer journeys are fragmented, costing about ${F.money(tot, 0)} per month`, `80% range: ${ci(waste, v => F.money(v, 0))}. Of that, ${F.money(m(adW), 0)} is ad spend on untracked or redundant paths and ${F.money(m(dupW), 0)} is duplicate lead and contact waste.`);
+  h += MT.stats([['Fragmented journeys', F.pct(fr, 0), '80% range ' + ci(frag, v => F.pct(v, 0)), fr > 0.4 ? 'bad' : fr > 0.2 ? 'warn' : 'good'], ['Ghost users', F.int(gh), 'range ' + ci(ghost, F.int) + ' per ' + F.int(p.aud) + ' real people'], ['Unstitched sessions / month', F.int(m(unstitched)), ci(unstitched, F.int)], ['Ad spend wasted / month', F.money(m(adW), 0), F.pct(m(adW) / p.spend, 1) + ' of spend'], ['Duplicate lead waste / month', F.money(m(dupW), 0), F.pct(p.dup / 100, 0) + ' duplicate rate'], ['Annual cost of the gap', F.money(tot * 12, 0), ci(waste, v => F.money(v * 12, 0))]]);
+  h += '<div class="card"><div id="c1"></div></div>';
+  const lever = [['Raise web-to-CRM match by 10 points', 10]].map(([l, d]) => { const web2 = Math.min(0.99, p.web / 100 + d / 100), pE = Math.exp(-p.cookie / p.gap), pf = 1 - (1 - p.multi / 100 * (1 - web2)) * (1 - pE * (1 - web2)), w2 = p.spend * p.dep / 100 * pf * p.red / 100, w1 = p.spend * p.dep / 100 * m(frag) * p.red / 100; return [l, w1 - w2]; });
+  h += '<div class="card"><h3>What moves the number</h3>' + MT.tbl(['Lever', 'Monthly saving (approx.)'], [[lever[0][0], F.money(Math.max(0, lever[0][1]), 0)], ['Deduplicate CRM contacts (halve the duplicate rate)', F.money(m(dupW) / 2, 0)], ['Extend effective cookie life with first-party server-side tagging', 'Reduces expiry share of fragmentation']], { num: [1] }) + '</div>';
+  h += MT.note('<b>Model.</b> Each of 4,000 draws varies every input by up to the uncertainty you set. A cookie expires between visits with probability exp(-lifetime / mean gap). A journey is fragmented when a user is on several devices or has an expired cookie and the session cannot be matched to a CRM ID. Ghost users are extra IDs beyond real people. Ad waste is identity-dependent spend, times the fragmented share, times the redundant share. Assumptions are rough by design; feed it your measured values for a defensible range.');
+  $('#out').innerHTML = h;
+  C.hist($('#c1'), { title: 'Distribution of monthly waste across simulations', values: waste, marker: tot, markerLabel: 'Mean', bins: 28, xFmt: v => F.money(v, 0) });
+}
+$('#uncv').textContent = '15%'; $('#rerun').addEventListener('click', () => { seed = Math.floor(Math.random() * 1e6); run(); });
+MT.live(document.querySelector('.split'), run);
+})();
+</script>

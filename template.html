@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{title}} | {{brand}}</title>
+<meta name="description" content="{{desc}}">
+{{canonical}}{{fonts}}{{css}}
+</head>
+<body>
+<header class="topbar">
+  {{brandlink}}
+  <span class="crumb">{{group}}</span>
+  <span class="spacer"></span>
+  <button class="theme-btn" type="button">Dark mode</button>
+</header>
+<main class="wrap">
+  <div class="hero">
+    <h1 class="serif">{{title}}</h1>
+    <p>{{desc}}</p>
+    <span class="privacy"><span class="dot"></span>Runs entirely in your browser. Nothing is uploaded. Your inputs are saved only on this device.</span>
+  </div>
+  <div class="toolbar">
+    <a class="btn btn-secondary btn-sm" href="#guide">How it works</a>
+    {{tplbtn}}<button class="btn btn-secondary btn-sm" type="button" data-act="print">Print or save PDF</button>
+    <button class="btn btn-ghost btn-sm" type="button" data-act="clear">Clear saved inputs</button>
+    <span class="saved-note"><span class="kbd">Ctrl</span> + <span class="kbd">Enter</span> runs the tool</span>
+  </div>
+{{body}}
+  <section class="card guide" id="guide">
+    <h2 class="serif" style="font-size:1.5rem">How this tool works</h2>
+{{guide}}
+  </section>
+  <div class="foot">Static tool. No account, no tracking, no server. Estimates depend on the inputs you provide and are decision aids, not guarantees.{{homelink}}</div>
+</main>
+{{js}}
+<script>{{script}}</script>
+<script>MT.boot({{slugjs}}, {{templatejs}});</script>
+</body>
+</html>

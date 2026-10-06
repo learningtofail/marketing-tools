@@ -1,0 +1,41 @@
+<!--META {"title":"Affiliate Commission & Margin Viability Calculator","short":"Find the maximum safe commission for your unit economics and test tiered partner payouts.","desc":"Model flat and percentage commission structures against true unit economics after discounts, returns, fees and shipping. See the maximum safe payout, break-even acquisition cost and partner tier viability.","tag":"Finance"} -->
+<div class="split">
+  <div>
+    <div class="card"><h3>Product economics</h3><div id="f1"></div></div>
+    <div class="card"><h3>Program rules</h3><div id="f2"></div></div>
+    <div class="card"><h3>Partner tiers</h3><p class="sub">Monthly orders and commission rate per tier.</p><div id="tiers"></div><div class="actions"><button class="btn btn-secondary btn-sm" id="addT" type="button">Add tier</button></div></div>
+  </div>
+  <div id="out" class="out"></div>
+</div>
+<script>
+(function () {
+const $ = MT.$, F = MT.fmt, C = MT.chart;
+MT.fields($('#f1'), [{ id: 'price', label: 'Retail price ($)', value: 89 }, { id: 'cogs', label: 'COGS per unit ($)', value: 27 }, { id: 'fee', label: 'Payment fee (%)', value: 2.9 }, { id: 'feeFix', label: 'Payment fee fixed ($)', value: 0.3 }, { id: 'ship', label: 'Shipping and packaging per order ($)', value: 7.5 }, { id: 'ret', label: 'Return rate (%)', value: 12 }, { id: 'restock', label: 'Returned units resold (%)', value: 80 }, { id: 'disc', label: 'Customer discount via affiliate (%)', value: 10 }], 'g2');
+MT.fields($('#f2'), [{ id: 'target', label: 'Target net margin (% of kept revenue)', value: 20 }, { id: 'claw', label: 'Commission is reversed on returns', type: 'check', value: true }, { id: 'flat', label: 'Flat payout per order to test ($)', value: 6 }], 'g2');
+let tiers = [{ n: 'Starter', o: 20, c: 8 }, { n: 'Growth', o: 100, c: 10 }, { n: 'Pro', o: 400, c: 12 }, { n: 'Elite', o: 1500, c: 15 }];
+function drawTiers() { $('#tiers').innerHTML = `<div class="table-wrap"><table class="t"><thead><tr><th>Tier</th><th>Orders/mo</th><th>Commission %</th><th></th></tr></thead><tbody>${tiers.map((t, i) => `<tr><td><input type="text" data-i="${i}" data-k="n" value="${MT.esc(t.n)}"></td><td><input type="number" data-i="${i}" data-k="o" value="${t.o}"></td><td><input type="number" step="0.5" data-i="${i}" data-k="c" value="${t.c}"></td><td>${tiers.length > 1 ? `<button class="btn btn-ghost btn-sm" data-d="${i}" type="button">Remove</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`; }
+$('#tiers').addEventListener('input', e => { const t = e.target; if (t.dataset.i != null) { tiers[+t.dataset.i][t.dataset.k] = t.dataset.k === 'n' ? t.value : +t.value; } });
+$('#tiers').addEventListener('click', e => { if (e.target.dataset.d != null) { tiers.splice(+e.target.dataset.d, 1); drawTiers(); run(); } });
+$('#addT').addEventListener('click', () => { tiers.push({ n: 'Tier ' + (tiers.length + 1), o: 50, c: 10 }); drawTiers(); run(); });
+function econ() {
+  const price = MT.f('price'), net = price * (1 - MT.f('disc') / 100), r = MT.f('ret') / 100, rs = MT.f('restock') / 100, kept = net * (1 - r), cogs = MT.f('cogs') * (1 - r * rs), fees = net * MT.f('fee') / 100 + MT.f('feeFix'), ship = MT.f('ship'), claw = MT.$('#f_claw').checked;
+  const before = kept - cogs - fees - ship, cbase = net * (claw ? 1 - r : 1);
+  return { net, kept, before, cbase, claw, target: MT.f('target') / 100 };
+}
+function run() {
+  const e = econ(); if (!(e.net > 0)) return;
+  const maxFlat = e.before - e.target * e.kept, maxC = e.cbase > 0 ? maxFlat / e.cbase : NaN, beC = e.before / e.cbase, flat = MT.f('flat');
+  const marginAt = c => (e.before - c / 100 * e.cbase) / e.kept;
+  let h = MT.rag(maxC < 0 ? 'red' : maxC < 0.05 ? 'yellow' : 'green', maxC < 0 ? 'Target margin is unreachable before any commission' : `Maximum safe commission: ${F.pct(maxC, 1)} of order value`, [`Margin before commission is ${F.money(e.before, 2)} per order (${F.pct(e.before / e.kept, 1)} of kept revenue). To keep ${F.pct(e.target, 0)} net margin you can pay at most ${F.money(maxFlat, 2)} per order.`]);
+  h += MT.stats([['Net order value after discount', F.money(e.net, 2), 'expected kept: ' + F.money(e.kept, 2)], ['Margin before commission', F.money(e.before, 2), F.pct(e.before / e.kept, 1) + ' of kept revenue'], ['Max safe commission', F.pct(maxC, 1), 'for ' + F.pct(e.target, 0) + ' net margin', MT.tone(maxC, 0.1, 0.05)], ['Break-even commission', F.pct(beC, 1), 'net margin reaches zero'], ['Max flat payout per order', F.money(maxFlat, 2), 'break-even acquisition cost: ' + F.money(e.before, 2)], [`Flat ${F.money(flat, 2)} payout margin`, F.pct((e.before - flat) / e.kept, 1), flat <= maxFlat ? 'within target' : 'below target', flat <= maxFlat ? 'good' : 'bad']]);
+  const cs = MT.range(13).map(i => i * 2.5), rowsS = cs.map(c => { const m = marginAt(c); return [c.toFixed(1) + '%', F.money(e.before - c / 100 * e.cbase, 2), { h: `<span style="display:block;padding:.15rem .3rem;${MT.cellTone(m >= e.target ? 'good' : m >= 0 ? 'warn' : 'bad')}">${F.pct(m, 1)}</span>` }]; });
+  h += '<div class="card"><div id="ch"></div></div>';
+  const trows = tiers.map(t => { const pay = t.o * t.c / 100 * e.cbase, tot = t.o * (e.before - t.c / 100 * e.cbase), m = marginAt(t.c), rec = Math.min(t.c, maxC * 100), ok = m >= e.target; return [t.n, F.int(t.o), t.c.toFixed(1) + '%', F.money(pay, 0), F.money(tot, 0), F.pct(m, 1), { h: ok ? MT.tag('Viable', 'good') : m >= 0 ? MT.tag('Below target', 'warn') : MT.tag('Loses money', 'bad') }, ok ? '—' : rec.toFixed(1) + '%']; });
+  h += '<div class="card"><h3>Partner tier viability</h3>' + MT.tbl(['Tier', 'Orders/mo', 'Commission', 'Monthly payout', 'Monthly net margin $', 'Net margin %', 'Status', 'Cap at'], trows, { num: [1, 2, 3, 4, 5, 7] }) + '</div>';
+  h += '<div class="card"><h3>Commission sensitivity</h3>' + MT.tbl(['Commission', 'Net margin per order', 'Net margin %'], rowsS, { num: [0, 1, 2] }) + '</div>';
+  $('#out').innerHTML = h;
+  C.line($('#ch'), { title: 'Net margin % vs commission rate (dashed: your target)', xs: cs, xFmt: v => v.toFixed(0) + '%', yFmt: v => (v * 100).toFixed(0) + '%', series: [{ name: 'Net margin', values: cs.map(marginAt), color: 'var(--series-1)' }, { name: 'Target', values: cs.map(() => e.target), color: 'var(--series-2)', dash: '5 4' }], zero: true });
+}
+drawTiers(); MT.live(document.querySelector('.split'), run);
+})();
+</script>

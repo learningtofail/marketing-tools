@@ -1,0 +1,46 @@
+<!--META {"title":"SEO Equivalent Value Translator","short":"Translate non-branded organic clicks into the paid search budget you would need to buy the same traffic.","desc":"Upload a Search Console performance export and translate non-branded organic clicks into paid search cost savings using CPC benchmarks, so SEO investment can be justified in finance terms.","tag":"SEO"} -->
+<div class="card">
+  <h3>Search Console export</h3>
+  <p class="sub">Performance report by query with clicks, impressions and position. Use Export in Search Console, or any CSV with a query and clicks column.</p>
+  <div id="drop"></div>
+  <div class="field" style="margin-top:.6rem"><label for="paste">Or paste CSV</label><textarea id="paste" placeholder="Top queries,Clicks,Impressions,CTR,Position"></textarea></div>
+  <div class="row3"><div class="field"><label for="cq">Query column</label><select id="cq"></select></div><div class="field"><label for="cc">Clicks column</label><select id="cc"></select></div><div class="field"><label for="cpos">Position column (optional)</label><select id="cpos"></select></div></div>
+</div>
+<div class="card">
+  <h3>Paid search assumptions</h3>
+  <div id="f"></div>
+  <div class="field"><label for="cpcs">Per-query CPC overrides (optional)</label><textarea id="cpcs" placeholder="query,cpc&#10;buy running shoes,2.35"></textarea><span class="hint">Pull these from Google Ads Keyword Planner or your search terms report. Queries not listed use the default CPC.</span></div>
+  <div class="actions"><button class="btn btn-primary" id="go" type="button">Calculate</button><button class="btn btn-secondary btn-sm" id="smp" type="button">Load sample</button></div>
+  <div class="err" id="err"></div>
+</div>
+<div id="out"></div>
+<script>
+(function () {
+const $ = MT.$, F = MT.fmt, S = MT.stat, C = MT.chart; let tab = null;
+MT.fields($('#f'), [{ id: 'cpc', label: 'Default CPC ($)', value: 1.8 }, { id: 'brand', label: 'Brand terms to exclude (comma separated)', type: 'text', value: '', placeholder: 'acme, acme inc' }, { id: 'days', label: 'Days covered by the export', value: 90 }, { id: 'repl', label: 'Paid replacement factor (%)', value: 100, hint: 'Share of organic clicks you would actually buy back. Lower it if some traffic would not be worth paying for.' }, { id: 'min', label: 'Minimum clicks per query', value: 1 }], 'g3');
+function load(t) { tab = MT.readTable(t, /quer|clicks/i); const c = tab.cols; MT.fillSelect($('#cq'), c, /quer|keyword|search term/i); MT.fillSelect($('#cc'), c, /click/i); MT.fillSelect($('#cpos'), c, /position|pos/i, { none: true }); }
+MT.dropzone($('#drop'), t => { $('#paste').value = t; load(t); }); $('#paste').addEventListener('input', MT.debounce(() => load($('#paste').value), 250));
+$('#smp').addEventListener('click', () => { const r = MT.rng(3), q = ['acme shoes', 'running shoes', 'best trail running shoes', 'how to choose running shoes', 'waterproof running shoes', 'marathon training shoes', 'shoe size chart', 'acme trail', 'cushioned running shoes', 'stability shoes for flat feet', 'buy running shoes online', 'women trail shoes', 'running shoe brands']; const rows = [['Top queries', 'Clicks', 'Impressions', 'CTR', 'Position']]; q.forEach((x, i) => { const c = Math.round(2600 / (i + 1.2) * (0.7 + 0.6 * r.u())); rows.push([x, c, c * 14, '7.1%', (1.2 + i * 1.7 + r.u()).toFixed(1)]); }); for (let i = 0; i < 60; i++) { const c = Math.round(2 + 60 * r.u() * r.u()); rows.push(['long tail query ' + (i + 1), c, c * 30, '2%', (5 + r.u() * 25).toFixed(1)]); } const t = MT.toCSV(rows); $('#paste').value = t; load(t); MT.fset('brand', 'acme'); run(); });
+function run() {
+  $('#err').textContent = ''; if (!tab) { $('#err').textContent = 'Paste or upload an export first.'; return; }
+  const qc = $('#cq').value, cc = $('#cc').value, pc = $('#cpos').value, dc = MT.f('cpc'), brands = MT.$('#f_brand').value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean), repl = MT.f('repl') / 100, days = MT.f('days') || 90, minC = MT.f('min') || 0;
+  const ov = new Map(); MT.parseCSV($('#cpcs').value || '').forEach((r, i) => { if (i === 0 && !isFinite(MT.num(r[1]))) return; const v = MT.num(r[1]); if (r[0] && isFinite(v)) ov.set(String(r[0]).trim().toLowerCase(), v); });
+  let brandClicks = 0, total = 0, usedDef = 0; const rows = [];
+  tab.rows.forEach(r => { const q = String(r[qc]).trim(), cl = MT.num(r[cc]); if (!q || !isFinite(cl)) return; total += cl; const isB = brands.some(b => q.toLowerCase().includes(b)); if (isB) { brandClicks += cl; return; } if (cl < minC) return; const cpc = ov.has(q.toLowerCase()) ? ov.get(q.toLowerCase()) : (usedDef++, dc); rows.push({ q, cl, cpc, val: cl * cpc * repl, pos: pc ? MT.num(r[pc]) : NaN }); });
+  if (!rows.length) { $('#err').textContent = 'No non-branded queries found. Check the columns and brand terms.'; return; }
+  const nb = S.sum(rows.map(x => x.cl)), val = S.sum(rows.map(x => x.val)), ann = val * 365 / days, mo = val * 30.4 / days; rows.sort((a, b) => b.val - a.val);
+  const top10 = S.sum(rows.slice(0, 10).map(x => x.val)) / val;
+  let h = MT.verdict('info', `${F.money(val, 0)} of paid search value in ${days} days`, `Buying ${F.int(nb)} non-branded clicks at these CPCs would cost about ${F.money(mo, 0)} per month, or ${F.money(ann, 0)} annualized.`);
+  h += MT.stats([['Non-branded clicks', F.int(nb), F.pct(nb / total, 0) + ' of all clicks'], ['Excluded brand clicks', F.int(brandClicks), brands.length ? brands.join(', ') : 'no brand terms set'], ['Equivalent ad spend', F.money(val, 0), `${days}-day period`], ['Per month', F.money(mo, 0), 'annualized: ' + F.money(ann, 0)], ['Effective CPC', F.money(val / nb / repl, 2), `${ov.size ? ov.size + ' overrides, ' : ''}${usedDef} queries at default`], ['Top 10 query share', F.pct(top10, 0), 'of equivalent value']]);
+  h += '<div class="card"><div id="c1"></div><div id="c2"></div></div>';
+  const bands = [['1 to 3', 0, 3.5], ['4 to 10', 3.5, 10.5], ['11 to 20', 10.5, 20.5], ['21+', 20.5, 1e9]], bv = bands.map(b => S.sum(rows.filter(x => x.pos >= b[1] && x.pos < b[2]).map(x => x.val)));
+  h += '<div class="card"><h3>Top queries by equivalent value</h3>' + MT.tbl(['Query', 'Clicks', 'CPC', 'Equivalent value', ...(pc ? ['Avg position'] : [])], rows.slice(0, 30).map(x => [x.q, F.int(x.cl), F.money(x.cpc, 2), F.money(x.val, 0), ...(pc ? [isFinite(x.pos) ? x.pos.toFixed(1) : '—'] : [])]), { num: [1, 2, 3, 4] }) + '<div class="actions"><button class="btn btn-secondary btn-sm" id="dl" type="button">Download all queries (CSV)</button></div></div>';
+  h += MT.note('<b>Reading this number.</b> It is a replacement cost, not revenue and not a promise. Organic clicks and paid clicks convert differently, and many organic clicks would not be bought at these bids. Present it next to the SEO budget as a floor for what the traffic is worth, and adjust the replacement factor to be conservative.');
+  $('#out').innerHTML = h;
+  C.hbars($('#c1'), { title: 'Equivalent value, top 15 queries', cats: rows.slice(0, 15).map(x => x.q), values: rows.slice(0, 15).map(x => x.val), fmt: v => F.money(v, 0) });
+  if (pc) C.bars($('#c2'), { title: 'Equivalent value by average ranking position', cats: bands.map(b => 'Position ' + b[0]), series: [{ name: 'Value', values: bv, color: 'var(--series-1)' }], yFmt: v => F.money(v, 0) });
+  $('#dl').addEventListener('click', () => MT.download('seo-equivalent-value.csv', MT.toCSV([['query', 'clicks', 'cpc', 'equivalent_value', 'position']].concat(rows.map(x => [x.q, x.cl, x.cpc, x.val.toFixed(2), x.pos]))), 'text/csv'));
+}
+$('#go').addEventListener('click', run);
+})();
+</script>

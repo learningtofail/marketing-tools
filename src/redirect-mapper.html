@@ -1,0 +1,73 @@
+<!--META {"title":"Bulk Redirect Mapper & Loop Validator","short":"Validate a migration redirect map, collapse chains into single hops, remove loops, and export server configs.","desc":"Paste or upload a two-column redirect map. The tool builds a directed graph, finds loops, chains, self-references, conflicting duplicates and invalid targets, then outputs a consolidated 1-to-1 map for .htaccess, Nginx, Cloudflare, Netlify or CSV.","tag":"Technical SEO"} -->
+<div class="card"><h3>Redirect map</h3>
+  <p class="sub">Two columns: legacy source URL, destination URL. A header row is optional. Sources can be full URLs or paths. Wildcards and regex rules are not evaluated; rows are treated as exact matches.</p>
+  <div id="drop"></div>
+  <div class="field" style="margin-top:.6rem"><label for="paste">Or paste rows</label><textarea id="paste" rows="8" placeholder="/old-page,/new-page&#10;https://example.com/a,https://example.com/b"></textarea></div>
+  <div class="row3"><div class="field"><label for="host">Site host (to shorten same-site targets)</label><input id="host" type="text" placeholder="www.example.com"></div><div class="field"><label for="tsl">Trailing slash</label><select id="tsl"><option value="ignore" selected>Treat /a and /a/ as the same</option><option value="strict">Treat as different</option></select></div><div class="field"><label for="qs">Query strings</label><select id="qs"><option value="keep" selected>Keep in matching</option><option value="ignore">Ignore in matching</option></select></div></div>
+  <div class="row3"><div class="field"><label for="code">Status code</label><select id="code"><option value="301" selected>301 permanent</option><option value="302">302 temporary</option><option value="308">308 permanent</option></select></div><div class="field"><label for="cs">Case</label><select id="cs"><option value="ci" selected>Case-insensitive paths</option><option value="cs">Case-sensitive paths</option></select></div></div>
+  <div class="actions"><button class="btn btn-primary" id="go" type="button">Validate and consolidate</button><button class="btn btn-secondary btn-sm" id="smp" type="button">Load sample</button></div><div class="err" id="err"></div>
+</div>
+<div id="out"></div>
+<script>
+(function () {
+const $ = MT.$, F = MT.fmt, C = MT.chart;
+MT.dropzone($('#drop'), t => { $('#paste').value = t; });
+$('#smp').addEventListener('click', () => { $('#paste').value = `source,target
+/blog/old-post,/blog/new-post
+/blog/new-post,/insights/new-post
+/insights/new-post,/insights/new-post-2026
+/products/widget,/shop/widget
+/shop/widget,/products/widget
+/about-us,/about-us
+/pricing-old,javascript:alert(1)
+/careers,ftp://files.example.com/careers
+/faq,/support/faq
+/faq,/help/faq
+/team/,/about/team
+/team,/about/team
+https://www.example.com/contact-us,https://www.example.com/contact
+/contact,/contact-us
+/landing/summer,https://partner.example.org/summer
+/old-shop,/shop`; $('#host').value = 'www.example.com'; run(); });
+const cfg = () => ({ tsl: $('#tsl').value, qs: $('#qs').value, cs: $('#cs').value, host: $('#host').value.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '') });
+function key(u, c) { let s = u.trim(); let host = '', path = s, q = ''; const m = s.match(/^(https?:)\/\/([^\/?#]+)(.*)$/i); if (m) { host = m[2].toLowerCase(); path = m[3] || '/'; } path = path.split('#')[0]; const qi = path.indexOf('?'); if (qi >= 0) { q = path.slice(qi); path = path.slice(0, qi); } if (!path) path = '/'; if (c.tsl === 'ignore' && path.length > 1) path = path.replace(/\/+$/, ''); if (c.cs === 'ci') path = path.toLowerCase(); return { host, path, q: c.qs === 'keep' ? q : '', k: path + (c.qs === 'keep' ? q : '') }; }
+function valid(u) { const s = u.trim(); if (!s) return 'Empty value'; if (/^[a-z][a-z0-9+.\-]*:/i.test(s) && !/^https?:/i.test(s)) return 'Invalid protocol (' + s.split(':')[0] + ')'; if (!/^https?:\/\//i.test(s) && !s.startsWith('/')) return 'Not an absolute URL or a path starting with /'; if (/\s/.test(s)) return 'Contains whitespace'; return ''; }
+function run() {
+  $('#err').textContent = ''; const c = cfg(); let raw = MT.parseCSV($('#paste').value).filter(r => r.length >= 2 && (r[0] || r[1])); if (raw.length && /^(source|from|old|legacy|url)/i.test(String(raw[0][0]).trim()) && !/^\/|^https?:/i.test(String(raw[0][0]).trim())) raw = raw.slice(1);
+  if (!raw.length) { $('#err').textContent = 'No rows found.'; return; }
+  const iss = [], rows = [], seen = new Map();
+  raw.forEach((r, i) => { const s = String(r[0]).trim(), t = String(r[1]).trim(), ln = i + 1; let bad = valid(s) && ('Source: ' + valid(s)) || valid(t) && ('Target: ' + valid(t)); if (bad) { iss.push({ ln, s, t, type: 'Invalid', sev: 'high', msg: bad }); return; } const ks = key(s, c), kt = key(t, c); if (ks.host && c.host && ks.host !== c.host && ks.host !== 'www.' + c.host && 'www.' + ks.host !== c.host) iss.push({ ln, s, t, type: 'Foreign source host', sev: 'med', msg: `Source host ${ks.host} differs from ${c.host}. A server only redirects its own host.` });
+    if (seen.has(ks.k)) { const p = seen.get(ks.k); if (p.t === t || key(p.t, c).k === kt.k && key(p.t, c).host === kt.host) iss.push({ ln, s, t, type: 'Duplicate', sev: 'low', msg: `Repeats line ${p.ln}. Removed.` }); else iss.push({ ln, s, t, type: 'Conflict', sev: 'high', msg: `Same source as line ${p.ln} with a different target (${p.t}). First rule kept.` }); return; }
+    if (ks.k === kt.k && (!kt.host || !ks.host || kt.host === ks.host)) { iss.push({ ln, s, t, type: 'Self-reference', sev: 'high', msg: 'Source and target are the same URL.' }); seen.set(ks.k, { t, ln }); return; }
+    seen.set(ks.k, { t, ln }); rows.push({ ln, s, t, ks, kt }); });
+  const map = new Map(rows.map(r => [r.ks.k, r])), finals = [], loopRows = new Set();
+  const tkey = r => (r.kt.host && (!c.host || (r.kt.host !== c.host && r.kt.host !== 'www.' + c.host && 'www.' + r.kt.host !== c.host)) ? null : r.kt.k);
+  rows.forEach(r => { const path = [r.ks.k]; let cur = r, hops = 1, loop = false, term = r.t; const vis = new Set([r.ks.k]);
+    for (;;) { const nk = tkey(cur); if (nk == null || !map.has(nk)) { term = cur.t; break; } if (vis.has(nk)) { loop = true; path.push(nk); break; } vis.add(nk); path.push(nk); cur = map.get(nk); hops++; term = cur.t; if (hops > 500) { loop = true; break; } }
+    if (loop) { loopRows.add(r.ln); iss.push({ ln: r.ln, s: r.s, t: r.t, type: 'Loop', sev: 'high', msg: 'Redirect cycle: ' + path.join(' \u2192 ') }); } else { if (hops > 1) iss.push({ ln: r.ln, s: r.s, t: r.t, type: 'Chain', sev: 'med', msg: `${hops} hops. Collapsed to ${term}.` }); finals.push({ ln: r.ln, s: r.s, t: term, hops, ks: r.ks }); } });
+  const cnt = t => iss.filter(i => i.type === t).length, high = iss.filter(i => i.sev === 'high').length;
+  const sh = u => { const k = key(u, { tsl: 'strict', qs: 'keep', cs: 'cs' }); const pth = k.path.length > 1 ? k.path.replace(/\/+$/, '') : k.path; return (c.host && (k.host === c.host || k.host === 'www.' + c.host)) || !k.host ? pth + k.q : u.trim(); };
+  const code = $('#code').value, pairs = finals.map(f => ({ from: sh(f.s), to: /^https?:/i.test(f.t) && c.host && ((key(f.t, { tsl: 'strict', qs: 'keep', cs: 'cs' }).host === c.host)) ? f.t : f.t }));
+  const esc = { ht: s => s.replace(/ /g, '%20') };
+  const out = {
+    htaccess: '# Generated redirect map (' + pairs.length + ' rules)\nRewriteEngine On\n' + pairs.map(p => { const [pa, qa] = p.from.split('?'); return (qa ? `RewriteCond %{QUERY_STRING} ^${qa.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$\n` : '') + `RewriteRule ^${pa.replace(/^\//, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/?$ ${p.to}${qa ? '?' : ''} [R=${code},L${qa ? ',QSD' : ''}]`; }).join('\n'),
+    nginx: '# Place the map block in http {} and the if-block in your server {}\nmap $request_uri $redirect_target {\n    default "";\n' + pairs.map(p => `    "${p.from.replace(/"/g, '\\"')}" "${p.to.replace(/"/g, '\\"')}";`).join('\n') + '\n}\n\n# server {\n#     if ($redirect_target) { return ' + code + ' $redirect_target; }\n# }',
+    cloudflare: MT.toCSV([['source_url', 'target_url', 'status_code', 'preserve_query_string', 'include_subdomains', 'subpath_matching', 'preserve_path_suffix']].concat(pairs.map(p => [(c.host || 'example.com') + p.from, /^https?:/i.test(p.to) ? p.to : 'https://' + (c.host || 'example.com') + p.to, code, 'FALSE', 'FALSE', 'FALSE', 'FALSE']))),
+    netlify: '# _redirects\n' + pairs.map(p => `${p.from}  ${p.to}  ${code}`).join('\n'),
+    csv: MT.toCSV([['source', 'final_target', 'status_code']].concat(pairs.map(p => [p.from, p.to, code])))
+  };
+  let h = MT.rag(high ? 'red' : cnt('Chain') ? 'yellow' : 'green', high ? `${high} blocking problems in ${raw.length} rows` : cnt('Chain') ? 'No loops; chains were collapsed to single hops' : 'Map is clean', [`${finals.length} rules are ready to deploy.`, `${cnt('Loop')} loop rows, ${cnt('Chain')} chains, ${cnt('Self-reference')} self-references, ${cnt('Conflict')} conflicts, ${cnt('Invalid')} invalid rows.`]);
+  h += MT.stats([['Input rows', String(raw.length), ''], ['Deployable rules', String(finals.length), 'single hop each', 'good'], ['Loops', String(cnt('Loop')), 'cannot resolve', cnt('Loop') ? 'bad' : 'good'], ['Chains collapsed', String(cnt('Chain')), 'longer than 1 hop', cnt('Chain') ? 'warn' : 'good'], ['Conflicts', String(cnt('Conflict')), 'same source, two targets', cnt('Conflict') ? 'bad' : 'good']]);
+  const sevTag = s => MT.tag(s === 'high' ? 'High' : s === 'med' ? 'Medium' : 'Low', s === 'high' ? 'bad' : s === 'med' ? 'warn' : '');
+  h += '<div class="card"><h3>Findings</h3>' + (iss.length ? MT.tbl(['Line', 'Type', 'Severity', 'Source', 'Detail'], iss.sort((a, b) => ({ high: 0, med: 1, low: 2 })[a.sev] - ({ high: 0, med: 1, low: 2 })[b.sev] || a.ln - b.ln).map(i => [i.ln, i.type, { h: sevTag(i.sev) }, i.s, i.msg]), { num: [0] }) : '<p class="muted">No issues.</p>') + '</div>';
+  h += '<div class="card"><h3>Consolidated 1-to-1 map</h3>' + (finals.length ? MT.tbl(['Source', 'Final target', 'Hops removed'], finals.slice(0, 200).map(f => [sh(f.s), f.t, Math.max(0, f.hops - 1)]), { num: [2] }) : '<p class="muted">Nothing deployable. Fix the blocking problems first.</p>') + '</div>';
+  h += '<div class="card"><h3>Export</h3><div class="row3"><div class="field"><label for="fmt">Format</label><select id="fmt"><option value="htaccess">.htaccess (Apache mod_rewrite)</option><option value="nginx">Nginx map</option><option value="cloudflare">Cloudflare bulk redirect CSV</option><option value="netlify">Netlify / Cloudflare Pages _redirects</option><option value="csv">Plain CSV</option></select></div></div><pre class="code" id="cfg"></pre><div class="actions"><button class="btn btn-secondary btn-sm" id="cp" type="button">Copy</button><button class="btn btn-secondary btn-sm" id="dl" type="button">Download</button></div></div>';
+  h += MT.note('<b>Rules applied.</b> Chains resolve to the final target. Loop rows and self-references are excluded from the export. When one source has two targets the first row wins. Matching ignores fragments. Fix loops at the source by deciding the canonical URL, then rerun.');
+  $('#out').innerHTML = h;
+  const show = () => { $('#cfg').textContent = out[$('#fmt').value]; }; $('#fmt').addEventListener('change', show); show();
+  $('#cp').addEventListener('click', e => MT.copy(out[$('#fmt').value], e.target));
+  $('#dl').addEventListener('click', () => { const f = $('#fmt').value; MT.download({ htaccess: '.htaccess', nginx: 'redirects.nginx.conf', cloudflare: 'cloudflare-bulk-redirects.csv', netlify: '_redirects', csv: 'redirects.csv' }[f], out[f], 'text/plain'); });
+}
+$('#go').addEventListener('click', run);
+})();
+</script>

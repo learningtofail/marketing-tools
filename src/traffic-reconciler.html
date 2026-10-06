@@ -1,0 +1,43 @@
+<!--META {"title":"Reported-to-Verified Traffic Reconciler","short":"Compare ad platform clicks to analytics sessions by campaign and quantify the gap you are paying for.","desc":"Line up platform-reported clicks against analytics sessions per campaign, flag campaigns with abnormal loss, and put a dollar value on unverified traffic.","tag":"Paid search"} -->
+<div class="card"><h3>Campaign data</h3>
+  <p class="sub">One row per campaign: platform clicks and analytics sessions for the same dates and the same UTM campaign. Spend is optional.</p>
+  <div id="drop"></div>
+  <div class="field" style="margin-top:.6rem"><label for="paste">Or paste CSV</label><textarea id="paste" placeholder="campaign,platform_clicks,sessions,spend"></textarea></div>
+  <div class="row3"><div class="field"><label for="cn">Campaign</label><select id="cn"></select></div><div class="field"><label for="cc">Platform clicks</label><select id="cc"></select></div><div class="field"><label for="cs">Analytics sessions</label><select id="cs"></select></div></div>
+  <div class="row3"><div class="field"><label for="cp">Spend (optional)</label><select id="cp"></select></div><div class="field"><label for="lo">Expected ratio, low (%)</label><input id="lo" type="number" value="80"></div><div class="field"><label for="hi">Expected ratio, high (%)</label><input id="hi" type="number" value="105"></div></div>
+  <div class="actions"><button class="btn btn-primary" id="go" type="button">Reconcile</button><button class="btn btn-secondary btn-sm" id="smp" type="button">Load sample</button></div><div class="err" id="err"></div>
+</div>
+<div id="out"></div>
+<script>
+(function () {
+const $ = MT.$, F = MT.fmt, S = MT.stat, C = MT.chart; let tab = null;
+function load(t) { tab = MT.readTable(t, /campaign|click|session/i); const c = tab.cols; MT.fillSelect($('#cn'), c, /campaign|name/i); MT.fillSelect($('#cc'), c, /click/i); MT.fillSelect($('#cs'), c, /session|visit/i); MT.fillSelect($('#cp'), c, /spend|cost/i, { none: true }); if (!MT.guess(c, /spend|cost/i)) $('#cp').value = ''; }
+MT.dropzone($('#drop'), t => { $('#paste').value = t; load(t); }); $('#paste').addEventListener('input', MT.debounce(() => load($('#paste').value), 250));
+$('#smp').addEventListener('click', () => { const t = `campaign,platform_clicks,sessions,spend
+brand_search,18200,17100,9100
+nonbrand_generic,42000,36800,52500
+nonbrand_competitor,9800,6100,17600
+shopping_all,61000,55900,30500
+display_prospecting,88000,41200,22000
+youtube_remarketing,15300,9900,4600
+pmax_catalog,47000,38700,28200`; $('#paste').value = t; load(t); run(); });
+function run() {
+  $('#err').textContent = ''; if (!tab) { $('#err').textContent = 'Paste or upload data first.'; return; }
+  const n = $('#cn').value, c = $('#cc').value, s = $('#cs').value, p = $('#cp').value, lo = MT.val('lo') / 100, hi = MT.val('hi') / 100;
+  const rows = tab.rows.map(r => ({ n: String(r[n]).trim(), c: MT.num(r[c]), s: MT.num(r[s]), sp: p ? MT.num(r[p]) : NaN })).filter(r => r.n && isFinite(r.c) && isFinite(r.s) && r.c > 0 && !/^total$/i.test(r.n));
+  if (!rows.length) { $('#err').textContent = 'No usable rows.'; return; }
+  rows.forEach(r => { r.ratio = r.s / r.c; r.lost = Math.max(0, r.c - r.s); r.cpc = isFinite(r.sp) ? r.sp / r.c : NaN; r.waste = isFinite(r.cpc) && r.ratio < lo ? (r.c * lo - r.s) * r.cpc : 0; r.st = r.ratio < lo * 0.75 ? 'bad' : r.ratio < lo ? 'warn' : r.ratio > hi ? 'over' : 'good'; });
+  rows.sort((a, b) => a.ratio - b.ratio);
+  const tc = S.sum(rows.map(r => r.c)), ts = S.sum(rows.map(r => r.s)), tsp = S.sum(rows.filter(r => isFinite(r.sp)).map(r => r.sp)), waste = S.sum(rows.map(r => r.waste)), bad = rows.filter(r => r.st === 'bad' || r.st === 'warn');
+  let h = MT.rag(rows.some(r => r.st === 'bad') ? 'red' : bad.length ? 'yellow' : 'green', `Sessions are ${F.pct(ts / tc, 0)} of platform clicks; ${bad.length} of ${rows.length} campaigns fall below ${F.pct(lo, 0)}`, [tsp ? `About ${F.money(waste, 0)} of spend sits on clicks below the expected ratio.` : 'Add a spend column to price the gap.', bad.length ? `Worst: ${bad.slice(0, 3).map(r => r.n + ' (' + F.pct(r.ratio, 0) + ')').join(', ')}.` : 'No campaign breaches the expected range.']);
+  h += MT.stats([['Platform clicks', F.int(tc), ''], ['Analytics sessions', F.int(ts), F.pct(ts / tc, 1) + ' of clicks'], ['Unverified clicks', F.int(Math.max(0, tc - ts)), F.pct(Math.max(0, 1 - ts / tc), 1)], ['Spend on gap', tsp ? F.money(waste, 0) : '—', 'below expected ratio']]);
+  const tag = st => ({ bad: MT.tag('Investigate', 'bad'), warn: MT.tag('Low', 'warn'), over: MT.tag('Above range', 'warn'), good: MT.tag('In range', 'good') })[st];
+  h += '<div class="card"><h3>By campaign</h3>' + MT.tbl(['Campaign', 'Platform clicks', 'Sessions', 'Session / click', 'Unverified clicks', 'Spend on gap', 'Status'], rows.map(r => [r.n, F.int(r.c), F.int(r.s), F.pct(r.ratio, 1), F.int(r.lost), r.waste ? F.money(r.waste, 0) : '—', { h: tag(r.st) }]), { num: [1, 2, 3, 4, 5] }) + '<div class="actions"><button class="btn btn-secondary btn-sm" id="dl" type="button">Download CSV</button></div></div><div class="card"><div id="c1"></div></div>';
+  h += MT.note('<b>Why the gap exists.</b> Sessions below clicks are normal: users abandon before the page loads, consent banners block tags, redirects and ad blockers drop the beacon, and bots inflate platform clicks. Ratios far below the expected range, especially on Display and Demand Gen, often point to accidental clicks or invalid traffic. A ratio above the range usually means duplicate tags or sessions credited to a campaign by cross-campaign UTMs. Set the expected range from your own history for a clean campaign, then judge the rest against it.');
+  $('#out').innerHTML = h;
+  C.hbars($('#c1'), { title: 'Sessions as a share of platform clicks', cats: rows.map(r => r.n), values: rows.map(r => r.ratio * 100), fmt: v => v.toFixed(0) + '%' });
+  $('#dl').addEventListener('click', () => MT.download('traffic-reconciliation.csv', MT.toCSV([['campaign', 'platform_clicks', 'sessions', 'ratio', 'unverified_clicks', 'spend_on_gap', 'status']].concat(rows.map(r => [r.n, r.c, r.s, r.ratio.toFixed(4), r.lost, r.waste.toFixed(2), r.st]))), 'text/csv'));
+}
+$('#go').addEventListener('click', run);
+})();
+</script>

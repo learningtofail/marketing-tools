@@ -1,0 +1,62 @@
+<!--META {"title":"Paid Social Creative & Frequency Decay Monitor","short":"Catch creative fatigue before performance collapses by tracking CTR and CPA against rising frequency.","desc":"Upload daily performance by creative. The tool measures CTR and CPA decay from peak, relates it to frequency, and labels each creative Healthy, Fatigue Approaching, or Burnout.","tag":"Paid social"} -->
+<div class="card">
+  <h3>Daily performance by creative</h3>
+  <p class="sub">One row per creative per day. Needs date, creative or ad ID, impressions, clicks. Spend and conversions unlock CPA. A frequency column is used if present; otherwise frequency is estimated as cumulative impressions divided by the audience size you enter.</p>
+  <div id="drop"></div>
+  <div class="field" style="margin-top:.6rem"><label for="paste">Or paste CSV</label><textarea id="paste" placeholder="date,creative,impressions,clicks,spend,conversions,frequency"></textarea></div>
+  <div class="row3"><div class="field"><label for="cd">Date</label><select id="cd"></select></div><div class="field"><label for="cn">Creative / ad</label><select id="cn"></select></div><div class="field"><label for="ci">Impressions</label><select id="ci"></select></div></div>
+  <div class="row3"><div class="field"><label for="ck">Clicks</label><select id="ck"></select></div><div class="field"><label for="cs">Spend (optional)</label><select id="cs"></select></div><div class="field"><label for="cv">Conversions (optional)</label><select id="cv"></select></div></div>
+  <div class="row3"><div class="field"><label for="cf">Frequency (optional)</label><select id="cf"></select></div><div class="field"><label for="aud">Audience size (if no frequency column)</label><input id="aud" type="number" value="200000"></div><div class="field"><label for="win">Trend window</label><select id="win"><option value="7">7 days</option><option value="14" selected>14 days</option><option value="30">30 days</option></select></div></div>
+  <details><summary>Thresholds</summary><div id="f"></div></details>
+  <div class="actions"><button class="btn btn-primary" id="go" type="button">Analyze creatives</button><button class="btn btn-secondary btn-sm" id="smp" type="button">Load sample</button></div><div class="err" id="err"></div>
+</div>
+<div id="out"></div>
+<script>
+(function () {
+const $ = MT.$, F = MT.fmt, S = MT.stat, C = MT.chart; let tab = null, series = [];
+MT.fields($('#f'), [{ id: 'wc', label: 'Fatigue approaching: CTR down from peak (%)', value: 15 }, { id: 'bc', label: 'Burnout: CTR down from peak (%)', value: 30 }, { id: 'wp', label: 'Fatigue approaching: CPA up from best (%)', value: 20 }, { id: 'bp', label: 'Burnout: CPA up from best (%)', value: 40 }, { id: 'wf', label: 'Fatigue approaching: frequency at least', value: 2.5 }, { id: 'bf', label: 'Burnout: frequency at least', value: 4 }], 'g3');
+function load(t) { tab = MT.readTable(t, /date|day/i); const c = tab.cols; MT.fillSelect($('#cd'), c, /date|day/i); MT.fillSelect($('#cn'), c, /creative|ad name|ad_id|ad id|ad$|asset|name/i); MT.fillSelect($('#ci'), c, /impr/i); MT.fillSelect($('#ck'), c, /click/i); MT.fillSelect($('#cs'), c, /spend|cost/i, { none: true }); MT.fillSelect($('#cv'), c, /conv|purchase|lead/i, { none: true }); MT.fillSelect($('#cf'), c, /freq/i, { none: true }); if (!MT.guess(c, /freq/i)) $('#cf').value = ''; }
+MT.dropzone($('#drop'), t => { $('#paste').value = t; load(t); }); $('#paste').addEventListener('input', MT.debounce(() => load($('#paste').value), 250));
+$('#smp').addEventListener('click', () => { const r = MT.rng(7), rows = [['date', 'creative', 'impressions', 'clicks', 'spend', 'conversions', 'frequency']]; const spec = [['UGC_video_A', 0.0, 40], ['Static_offer_B', 0.012, 40], ['Carousel_C', 0.035, 34], ['Testimonial_D', 0.06, 30]]; spec.forEach(([n, decay, days]) => { let cum = 0; for (let d = 0; d < days; d++) { const impr = Math.round(14000 * (0.9 + 0.2 * r.u())); cum += impr; const freq = 1 + cum / 260000, ctr = 0.014 * Math.exp(-decay * Math.max(0, d - 6)) * (0.93 + 0.14 * r.u()), clicks = Math.round(impr * ctr), conv = Math.round(clicks * 0.045 * (0.85 + 0.3 * r.u())), spend = Math.round(impr * 0.011 * 100) / 100; rows.push([MT.fmt.date(Date.UTC(2026, 6, 1 + d)), n, impr, clicks, spend, conv, freq.toFixed(2)]); } }); const t = MT.toCSV(rows); $('#paste').value = t; load(t); run(); });
+function analyze() {
+  const cd = $('#cd').value, cn = $('#cn').value, ci = $('#ci').value, ck = $('#ck').value, cs = $('#cs').value, cv = $('#cv').value, cf = $('#cf').value, aud = MT.val('aud') || 1, W = +$('#win').value, m = new Map();
+  tab.rows.forEach(r => { const d = MT.parseDate(r[cd]), n = String(r[cn]).trim(), im = MT.num(r[ci]), cl = MT.num(r[ck]); if (!isFinite(d) || !n || !isFinite(im) || !isFinite(cl)) return; if (!m.has(n)) m.set(n, []); m.get(n).push({ d, im, cl, sp: cs ? MT.num(r[cs]) : NaN, cv: cv ? MT.num(r[cv]) : NaN, fq: cf ? MT.num(r[cf]) : NaN }); });
+  const out = []; m.forEach((a, name) => {
+    a.sort((x, y) => x.d - y.d); let cum = 0; a.forEach(x => { cum += x.im; x.fr = isFinite(x.fq) ? x.fq : 1 + cum / aud; x.ctr = x.im ? x.cl / x.im : NaN; });
+    const hasCpa = a.every(x => isFinite(x.sp) && isFinite(x.cv)) && S.sum(a.map(x => x.cv)) > 0, n = a.length;
+    const win = (i) => a.slice(Math.max(0, i - W + 1), i + 1), agg = (w) => { const im = S.sum(w.map(x => x.im)), cl = S.sum(w.map(x => x.cl)), sp = S.sum(w.map(x => x.sp)), cv = S.sum(w.map(x => x.cv)); return { ctr: im ? cl / im : NaN, cpa: cv > 0 ? sp / cv : NaN, cv, im }; };
+    const roll = a.map((_, i) => i + 1 >= Math.min(W, 5) ? agg(win(i)) : { ctr: NaN, cpa: NaN });
+    const valid = roll.map((r, i) => i).filter(i => isFinite(roll[i].ctr) && roll[i].im > 500);
+    let status = 'Insufficient data', sev = -1, det = {};
+    if (n >= 7 && valid.length >= 3) {
+      const peakI = valid.reduce((b, i) => roll[i].ctr > roll[b].ctr ? i : b, valid[0]), cur = roll[n - 1], peak = roll[peakI], ctrDrop = 1 - cur.ctr / peak.ctr;
+      let bestCpa = NaN, cpaUp = NaN; if (hasCpa) { const vc = valid.filter(i => roll[i].cv >= 3 && isFinite(roll[i].cpa)); if (vc.length && isFinite(cur.cpa)) { bestCpa = Math.min(...vc.map(i => roll[i].cpa)); cpaUp = cur.cpa / bestCpa - 1; } }
+      const last = a.slice(-Math.min(W, n)), fr = a[n - 1].fr; let slope = NaN, slopeP = NaN; if (last.length >= 6 && S.sd(last.map(x => x.fr)) > 0) { const f = S.ols(last.map(x => [1, x.fr]), last.map(x => x.ctr)); slope = f.beta[1]; slopeP = f.p[1]; }
+      const wc = MT.f('wc') / 100, bc = MT.f('bc') / 100, wp = MT.f('wp') / 100, bp = MT.f('bp') / 100, wf = MT.f('wf'), bf = MT.f('bf'), afterPeak = n - 1 > peakI;
+      const burn = (ctrDrop >= bc && (fr >= bf || cpaUp >= bp || !isFinite(cpaUp))) || cpaUp >= bp * 1.5, warn = ctrDrop >= wc || cpaUp >= wp || (fr >= wf && slope < 0 && slopeP < 0.1);
+      status = burn ? 'Burnout' : warn ? 'Fatigue approaching' : 'Healthy'; sev = burn ? 2 : warn ? 1 : 0; det = { ctrDrop, cpaUp, fr, slope, slopeP, peakCtr: peak.ctr, curCtr: cur.ctr, bestCpa, curCpa: cur.cpa, afterPeak };
+    }
+    out.push({ name, a, n, status, sev, det, roll, hasCpa, im: S.sum(a.map(x => x.im)) });
+  });
+  return out.sort((x, y) => y.sev - x.sev || y.im - x.im);
+}
+function run() {
+  $('#err').textContent = ''; if (!tab) { $('#err').textContent = 'Paste or upload data first.'; return; }
+  series = analyze(); if (!series.length) { $('#err').textContent = 'No usable rows. Check the column mapping.'; return; }
+  const cnt = k => series.filter(s => s.status === k).length, tagK = s => s === 'Burnout' ? 'bad' : s === 'Fatigue approaching' ? 'warn' : s === 'Healthy' ? 'good' : '';
+  const rec = s => s.status === 'Burnout' ? 'Retire or refresh now' : s.status === 'Fatigue approaching' ? 'Prepare a replacement; rotate soon' : s.status === 'Healthy' ? 'Keep running' : 'Collect more days';
+  let h = MT.rag(cnt('Burnout') ? 'red' : cnt('Fatigue approaching') ? 'yellow' : 'green', `${cnt('Burnout')} burned out, ${cnt('Fatigue approaching')} approaching fatigue, ${cnt('Healthy')} healthy`, [`${series.length} creatives analyzed over a ${$('#win').value}-day trend window.`]);
+  h += '<div class="card"><h3>Creative status</h3>' + MT.tbl(['Creative', 'Status', 'Days', 'Frequency', 'CTR: peak to now', 'CPA: best to now', 'Action'], series.map(s => { const d = s.det; return [s.name, { h: MT.tag(s.status, tagK(s.status)) }, s.n, isFinite(d.fr) ? d.fr.toFixed(2) : '—', isFinite(d.peakCtr) ? `${F.pct(d.peakCtr, 2)} → ${F.pct(d.curCtr, 2)} (${F.spct(-d.ctrDrop, 0)})` : '—', isFinite(d.bestCpa) ? `${F.money(d.bestCpa, 2)} → ${F.money(d.curCpa, 2)} (${F.spct(d.cpaUp, 0)})` : '—', rec(s)]; }), { num: [2, 3] }) + '</div>';
+  h += '<div class="card"><h3>Trend detail</h3><div class="field" style="max-width:320px"><label for="pick">Creative</label><select id="pick">' + series.map((s, i) => `<option value="${i}">${MT.esc(s.name)}</option>`).join('') + '</select></div><div id="c1"></div><div id="c2"></div><div id="c3"></div></div>';
+  h += MT.note('<b>How status is decided.</b> Burnout: CTR is down at least the burnout threshold from its peak window and either frequency or CPA has also crossed its burnout level. Fatigue approaching: CTR or CPA decay past the warning level, or high frequency with CTR falling as frequency rises. Windows need at least 500 impressions. Correlation of CTR with frequency inside a creative is suggestive, not proof, because CTR can also fall as the audience saturates for other reasons.');
+  $('#out').innerHTML = h; $('#pick').addEventListener('change', draw); draw();
+}
+function draw() {
+  const s = series[+$('#pick').value], xs = s.a.map(x => x.d), W = +$('#win').value;
+  C.line($('#c1'), { title: 'CTR: daily and ' + W + '-day rolling', xs, xFmt: F.date, yFmt: v => (v * 100).toFixed(2) + '%', series: [{ name: 'Daily CTR', values: s.a.map(x => x.ctr), color: 'var(--series-1)', width: 1.2 }, { name: 'Rolling CTR', values: s.roll.map(r => r.ctr), color: 'var(--series-2)' }], height: 220, table: false });
+  C.line($('#c2'), { title: 'Frequency', xs, xFmt: F.date, yFmt: v => v.toFixed(1), series: [{ name: 'Frequency', values: s.a.map(x => x.fr), color: 'var(--series-3)' }], height: 180, table: false });
+  if (s.hasCpa) C.line($('#c3'), { title: 'CPA: ' + W + '-day rolling', xs, xFmt: F.date, yFmt: v => F.money(v, 0), series: [{ name: 'Rolling CPA', values: s.roll.map(r => r.cpa), color: 'var(--series-5)' }], height: 180, table: false }); else $('#c3').innerHTML = '';
+}
+$('#go').addEventListener('click', run);
+})();
+</script>

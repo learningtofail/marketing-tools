@@ -1,0 +1,43 @@
+<!--META {"title":"Feature-to-Messaging Gap Analyzer","short":"Check which shipped features your launch copy never mentions, and which are named without a customer benefit.","desc":"Paste release notes and draft marketing copy. The tool extracts each feature, matches it against the copy by keyword overlap, and returns a coverage matrix marking features as covered with benefit, mentioned without benefit, or missing.","tag":"Messaging"} -->
+<div class="split">
+<div>
+  <div class="card"><h3>Release notes</h3><p class="sub">One feature per line or bullet. Headings and blank lines are ignored.</p><div class="field"><textarea id="notes" rows="10" placeholder="- Added bulk CSV export for reports&#10;- New role-based permissions for team workspaces"></textarea></div></div>
+  <div class="card"><h3>Marketing copy</h3><div class="field"><textarea id="copy" rows="10" placeholder="Paste the launch email, landing page or announcement copy."></textarea></div>
+    <div class="row2"><div class="field"><label for="thr">Match strictness</label><select id="thr"><option value="0.34">Loose (34% of feature terms)</option><option value="0.5" selected>Balanced (50%)</option><option value="0.67">Strict (67%)</option></select></div></div>
+    <div class="actions"><button class="btn btn-primary" id="go" type="button">Analyze coverage</button><button class="btn btn-secondary btn-sm" id="smp" type="button">Load sample</button></div></div>
+</div>
+<div id="out" class="out"></div>
+</div>
+<script>
+(function () {
+const $ = MT.$, F = MT.fmt, C = MT.chart;
+const BEN = /\b(save|saves|saving|faster|quicker|easier|easy|simpler|reduce|reduces|cut|cuts|increase|increases|boost|grow|avoid|prevent|eliminate|without|so you can|so that|helps? you|lets? you|allows? you|never have to|no more|instantly|in seconds|in minutes|hours|effortless|confidence|control|peace of mind)\b/i;
+const FILL = new Set(['added', 'add', 'new', 'now', 'improved', 'improve', 'improvements', 'updated', 'update', 'support', 'supports', 'fixed', 'fix', 'feature', 'features', 'release', 'launch', 'launched', 'introducing', 'enhanced', 'enhancement', 'ability', 'option', 'options', 'also', 'users', 'user', 'can', 'more']);
+const terms = s => Array.from(new Set(MT.tokens(s).map(MT.stem).filter(w => w.length > 2 && !FILL.has(w))));
+function run() {
+  const lines = $('#notes').value.split('\n').map(s => s.replace(/^\s*([-*•]|\d+[.)])\s*/, '').trim()).filter(s => s && !/^#{1,6}\s/.test(s) && s.length > 6), copy = $('#copy').value.trim(), thr = +$('#thr').value;
+  if (!lines.length || !copy) { $('#out').innerHTML = '<div class="card"><p class="muted">Paste release notes and marketing copy to see coverage.</p></div>'; return; }
+  const sents = copy.split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(Boolean), st = sents.map(s => new Set(terms(s))), all = new Set(terms(copy)), df = new Map(); st.forEach(set => set.forEach(w => df.set(w, (df.get(w) || 0) + 1)));
+  const res = lines.map(f => { const ft = terms(f); if (!ft.length) return { f, status: 'skip' }; let best = -1, bs = 0, bhits = []; st.forEach((set, i) => { const hits = ft.filter(w => set.has(w)), s = hits.length / ft.length; if (s > bs || (s === bs && hits.length > bhits.length)) { bs = s; best = i; bhits = hits; } }); const anywhere = ft.filter(w => all.has(w)).length / ft.length; const covered = bs >= thr, benefit = covered && (BEN.test(sents[best]) || (sents[best + 1] && BEN.test(sents[best + 1]) && bs >= thr)); return { f, ft, best: covered ? sents[best] : '', bs, anywhere, status: !covered ? (anywhere >= thr ? 'scattered' : 'missing') : benefit ? 'covered' : 'feature' }; }).filter(r => r.status !== 'skip');
+  const c = k => res.filter(r => r.status === k).length, n = res.length, miss = c('missing'), sc = c('scattered');
+  const cov = (c('covered') + c('feature')) / n;
+  let h = MT.rag(miss + sc === 0 && c('feature') === 0 ? 'green' : cov < 0.6 ? 'red' : 'yellow', `${F.pct(cov, 0)} of ${n} features appear in the copy; ${c('covered')} with a benefit`, [`${miss} missing entirely, ${sc} spread across sentences without one clear mention, ${c('feature')} named without a customer benefit.`]);
+  h += MT.stats([['Features', String(n), ''], ['Covered with benefit', String(c('covered')), F.pct(c('covered') / n, 0), 'good'], ['Feature only', String(c('feature')), 'no benefit language', c('feature') ? 'warn' : ''], ['Scattered', String(sc), 'terms present, no single mention', sc ? 'warn' : ''], ['Missing', String(miss), 'not in the copy', miss ? 'bad' : 'good']]);
+  const tg = { covered: MT.tag('Covered', 'good'), feature: MT.tag('Feature only', 'warn'), scattered: MT.tag('Scattered', 'warn'), missing: MT.tag('Missing', 'bad') }, ord = { missing: 0, scattered: 1, feature: 2, covered: 3 };
+  h += '<div class="card"><h3>Coverage matrix</h3>' + MT.tbl(['Feature', 'Status', 'Match', 'Best matching sentence'], res.slice().sort((a, b) => ord[a.status] - ord[b.status]).map(r => [r.f, { h: tg[r.status] }, F.pct(r.status === 'scattered' ? r.anywhere : r.bs, 0), r.best || '—']), { num: [2] }) + '<div class="actions"><button class="btn btn-secondary btn-sm" id="dl" type="button">Download CSV</button></div></div>';
+  const need = res.filter(r => r.status === 'missing' || r.status === 'scattered' || r.status === 'feature');
+  if (need.length) h += '<div class="card"><h3>Copy to write</h3><p class="sub">Each line is a prompt for a benefit sentence. Fill in the outcome your customer gets.</p>' + MT.tbl(['Feature', 'Suggested pattern'], need.map(r => [r.f, r.status === 'feature' ? `Add the outcome to the existing line: "${r.best}" plus "so you can [result]".` : `New line: "[Who] can now [do this], so [benefit]." Base it on: ${r.f}`])) + '</div>';
+  h += MT.note('<b>Method.</b> Each feature line is reduced to stemmed content terms. A feature counts as covered when one sentence of the copy contains at least the strictness share of its terms. Benefit language is detected by outcome words such as save, faster, reduce, without or so you can in that sentence or the next. Keyword overlap misses paraphrases, so review Missing rows for synonyms before adding copy.');
+  $('#out').innerHTML = h; $('#dl').addEventListener('click', () => MT.download('messaging-gap.csv', MT.toCSV([['feature', 'status', 'match', 'best_sentence']].concat(res.map(r => [r.f, r.status, (r.bs || 0).toFixed(2), r.best]))), 'text/csv'));
+}
+$('#smp').addEventListener('click', () => { $('#notes').value = `## Release 4.2
+- Added bulk CSV export for reports
+- New role-based permissions for team workspaces
+- Scheduled report delivery to Slack
+- Two-factor authentication with authenticator apps
+- Dark mode for the dashboard
+- Audit log with 12-month retention
+- API rate limits raised to 600 requests per minute`; $('#copy').value = `Meet 4.2, our biggest release for growing teams. Export any report to CSV in bulk, so you can hand finance the numbers in seconds instead of hours. Give every teammate the right access with role-based permissions for each workspace. Reports now land in Slack on a schedule. Protect every login with two-factor authentication. Nights are easier on the eyes too.`; run(); });
+$('#go').addEventListener('click', run);
+})();
+</script>

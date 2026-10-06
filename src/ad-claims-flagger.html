@@ -1,0 +1,51 @@
+<!--META {"title":"Ad Claims Substantiation & Compliance Flagger","short":"Highlight superlatives, absolutes and unqualified claims in ad copy, with qualifying language and review guidance.","desc":"Paste draft ad copy, landing page text or a script. The tool scans for superlatives, absolute guarantees, savings, health, comparative and environmental claims, checks for qualifying disclaimers, and returns annotated copy with advice.","tag":"Compliance"} -->
+<div class="split">
+<div>
+  <div class="card"><h3>Copy to check</h3><div class="field"><textarea id="txt" rows="14" placeholder="Paste ad copy, landing page text or a script."></textarea></div>
+    <div class="actions"><button class="btn btn-primary" id="go" type="button">Scan claims</button><button class="btn btn-secondary btn-sm" id="smp" type="button">Load sample</button></div></div>
+</div>
+<div id="out" class="out"></div>
+</div>
+<script>
+(function () {
+const $ = MT.$, F = MT.fmt;
+/* [regex, category, severity, advice, needsProof] */
+const R = [
+  [/#\s?1\b|\bnumber[\s-]one\b|\bno\.?\s?1\b/gi, 'Superlative', 'high', 'Ranking claims need a named, recent, independent source. Add "according to [source, year]" or remove.', true],
+  [/\b(best|greatest|finest|top[\s-]rated|most (?:trusted|popular|reliable|powerful|advanced|accurate|loved|recommended)|world[\s-]class|unbeatable|unmatched|unrivaled|second to none|leading|industry[\s-]leading|market[\s-]leading|award[\s-]winning)\b/gi, 'Superlative', 'high', 'Objective superlatives require substantiation. Keep only if you hold documented proof, or soften to a specific, verifiable fact.', true],
+  [/\b(fastest|quickest|cheapest|lowest[\s-]price|lowest[\s-]cost|biggest|largest|smallest|strongest|safest|easiest|most affordable)\b/gi, 'Superlative', 'high', 'Comparative extremes need head-to-head data. State the measure, the comparison set and the date.', true],
+  [/\bguarantee[ds]?\b|\b100\s?%\s?(?:satisfaction|guaranteed|safe|natural|effective|secure)|\bmoney[\s-]back\b/gi, 'Guarantee', 'high', 'State the full terms next to the claim: duration, conditions, how to claim. FTC rules require terms to be disclosed clearly.', false],
+  [/\brisk[\s-]free\b|\bno[\s-]risk\b|\bzero[\s-]risk\b|\bfoolproof\b|\bworks every time\b|\bnever fails?\b|\bpermanent(?:ly)?\b|\bforever\b/gi, 'Absolute', 'high', 'Absolute claims are hard to defend. Replace with a bounded, measurable statement or add explicit conditions.', true],
+  [/\b(clinically|scientifically|medically) (?:proven|tested|shown)\b|\bdoctor[\s-]recommended\b|\bdermatologist[\s-]tested\b|\bFDA[\s-](?:approved|cleared)\b|\bcures?\b|\btreats?\b|\bprevents?\b|\bdetox(?:ify)?\b/gi, 'Health or science', 'high', 'Needs competent and reliable scientific evidence on file, and review by legal or regulatory. Cite the study in a footnote.', true],
+  [/\blose\s+\d+\s?(?:lbs?|pounds|kg|kilos)|\bearn\s+\$\s?\d[\d,]*|\bmake\s+\$\s?\d[\d,]*|\bguaranteed (?:income|returns?|results?)\b/gi, 'Results claim', 'high', 'Specific outcomes must reflect typical results. Add a clear typical-results disclosure or remove.', true],
+  [/\b(save|saves|saving) (?:up to |over )?(?:\$\s?\d[\d,]*|\d+\s?%)|\b\d+\s?%\s?off\b|\bup to \d+\s?%|\b(?:was|regular(?:ly)?) \$\s?\d|\bfree\b|\blimited[\s-]time\b|\bonly today\b|\blast chance\b|\bwhile supplies last\b/gi, 'Price or offer', 'med', 'Show the terms: end date, exclusions, minimum spend, who qualifies. "Free" must not have hidden conditions. Reference prices must be genuine prior prices.', false],
+  [/\b(?:better|faster|cheaper|stronger|more effective|more reliable) than\b|\bunlike (?:other|the competition|competitors)\b|\bbeats? (?:the )?competition\b|\bout[\s-]?performs?\b/gi, 'Comparative', 'high', 'Name the comparison, the metric and the test date. Keep the test data on file. Avoid disparaging competitors without proof.', true],
+  [/\b(?:eco[\s-]friendly|green|sustainable|carbon[\s-](?:neutral|negative)|net[\s-]zero|biodegradable|compostable|recyclable|non[\s-]toxic|all[\s-]natural|natural|chemical[\s-]free)\b/gi, 'Environmental or natural', 'med', 'FTC Green Guides and EU rules require specific, qualified claims. Say what is recyclable, where, and what share of the product.', true],
+  [/\bmade in (?:the )?(?:usa|u\.s\.a?\.|america|canada)\b|\bproudly (?:american|canadian)\b/gi, 'Origin', 'med', '"Made in" claims need all or virtually all of the product made domestically. Qualify with "assembled in" or "with imported parts" where needed.', true],
+  [/\b(?:as seen (?:on|in)|featured (?:on|in)|trusted by|used by (?:millions|thousands|\d[\d,]+)|\d[\d,]*\+? (?:customers|users|clients|members))\b/gi, 'Social proof', 'med', 'Verify the number and the date. Keep a source and update it regularly. Name the media outlet only with permission.', true],
+  [/\b(?:results?|savings?) (?:may )?vary\b|\bnot typical\b|\bterms (?:and conditions )?apply\b|\bsee (?:details|terms|site)\b|\bconditions apply\b|\bbased on\b|\bsource:/gi, 'Qualifier', 'info', 'Qualifier found. Make sure it sits near the claim, in readable size and contrast.', false]
+];
+function scan(t) { const hits = []; R.forEach(([re, cat, sev, adv, proof]) => { re.lastIndex = 0; let m; while ((m = re.exec(t))) { hits.push({ s: m.index, e: m.index + m[0].length, txt: m[0], cat, sev, adv, proof }); if (m[0].length === 0) re.lastIndex++; } }); hits.sort((a, b) => a.s - b.s || b.e - a.e); const out = []; let end = -1; hits.forEach(h => { if (h.s >= end) { out.push(h); end = h.e; } else if (h.sev !== 'info' && out.length && out[out.length - 1].sev === 'info' && h.e > end) { out.push(h); end = h.e; } }); return out; }
+function run() {
+  const t = $('#txt').value; if (!t.trim()) { $('#out').innerHTML = '<div class="card"><p class="muted">Paste copy to scan.</p></div>'; return; }
+  const hits = scan(t), claims = hits.filter(h => h.sev !== 'info'), quals = hits.filter(h => h.sev === 'info'), foot = /(^|\n)\s*(\*|†|‡|¹|1\.)\s+\S/.test(t), star = /\*/.test(t);
+  const high = claims.filter(h => h.sev === 'high').length, med = claims.filter(h => h.sev === 'med').length, unq = claims.filter(h => h.proof).length;
+  const cats = new Map(); claims.forEach(h => cats.set(h.cat, (cats.get(h.cat) || 0) + 1));
+  const words = t.trim().split(/\s+/).length, density = claims.length / Math.max(words / 100, 1);
+  let h = MT.rag(high >= 3 ? 'red' : high || med ? 'yellow' : 'green', high ? `${high} high-risk claim${high > 1 ? 's' : ''} need substantiation or legal review` : claims.length ? `${med} claim${med > 1 ? 's' : ''} need qualifying terms` : 'No risky claim patterns found', [`${claims.length} flagged phrases in ${words} words (${density.toFixed(1)} per 100 words). ${quals.length} qualifier${quals.length === 1 ? '' : 's'} found.`, star && !foot ? 'An asterisk appears but no footnote text follows it.' : foot ? 'Footnote text is present.' : '']);
+  h += MT.stats([['High risk', String(high), 'substantiate or remove', high ? 'bad' : 'good'], ['Medium', String(med), 'add qualifying terms', med ? 'warn' : 'good'], ['Need proof on file', String(unq), 'documented evidence'], ['Qualifiers', String(quals.length), foot ? 'footnote present' : star ? 'asterisk without footnote' : 'none', star && !foot ? 'bad' : '']]);
+  let ann = '', p = 0; hits.forEach(x => { ann += MT.esc(t.slice(p, x.s)) + `<mark class="cl cl-${x.sev}" title="${MT.esc(x.cat)}">${MT.esc(t.slice(x.s, x.e))}</mark>`; p = x.e; }); ann += MT.esc(t.slice(p));
+  h += '<div class="card"><h3>Annotated copy</h3><style>.cl{padding:.05rem .2rem;border-radius:3px;color:var(--ink);border-bottom:2px solid}.cl-high{background:var(--critical-wash);border-color:var(--critical)}.cl-med{background:var(--warn-wash);border-color:var(--warn)}.cl-info{background:var(--good-wash);border-color:var(--good)}.ann{white-space:pre-wrap;line-height:1.75}</style><div class="ann">' + ann + '</div><p class="sub" style="margin-top:.6rem">Red: high risk. Amber: qualify. Green: qualifier present.</p></div>';
+  const tg = s => MT.tag(s === 'high' ? 'High' : s === 'med' ? 'Medium' : 'OK', s === 'high' ? 'bad' : s === 'med' ? 'warn' : 'good');
+  h += '<div class="card"><h3>Claims and advice</h3>' + (claims.length ? MT.tbl(['Phrase', 'Type', 'Risk', 'Proof needed', 'What to do'], claims.map(x => [x.txt, x.cat, { h: tg(x.sev) }, x.proof ? 'Yes' : 'Terms', x.adv])) : '<p class="muted">Nothing flagged.</p>') + '<div class="actions"><button class="btn btn-secondary btn-sm" id="dl" type="button">Download CSV</button><button class="btn btn-secondary btn-sm" id="cp" type="button">Copy review checklist</button></div></div>';
+  h += MT.note('<b>This is a screen, not legal advice.</b> The scanner matches phrases and cannot judge whether a claim is true or how a court or regulator would read it. Requirements differ by country and industry (FTC and state law in the US, Competition Bureau in Canada, ASA in the UK, and stricter rules for health, finance, and children). Send every high-risk item to legal or compliance, and keep the supporting evidence on file before launch.');
+  $('#out').innerHTML = h;
+  $('#dl').addEventListener('click', () => MT.download('claims-review.csv', MT.toCSV([['phrase', 'type', 'risk', 'advice']].concat(claims.map(x => [x.txt, x.cat, x.sev, x.adv]))), 'text/csv'));
+  $('#cp').addEventListener('click', e => MT.copy(claims.map(x => `[ ] "${x.txt}" (${x.cat}, ${x.sev}): ${x.adv}`).join('\n'), e.target));
+}
+$('#smp').addEventListener('click', () => { $('#txt').value = `The #1 project management tool trusted by 50,000 teams. Our industry-leading platform is the fastest way to ship, guaranteed. Try it risk-free for 30 days, and save up to 40% on annual plans. Clinically proven to reduce stress*, and better than the competition at every price point. Our eco-friendly packaging is 100% recyclable. Limited-time offer, free onboarding for new accounts. Terms apply.
+
+*Based on an internal survey of 200 users in 2025.`; run(); });
+$('#go').addEventListener('click', run);
+})();
+</script>

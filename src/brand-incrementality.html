@@ -1,0 +1,62 @@
+<!--META {"title":"Paid Search Brand Incrementality Estimator","short":"Estimate how many brand clicks and conversions paid search truly adds, and the incremental CPA you really pay.","desc":"Use a brand-ad pause test or your own assumptions to estimate organic recapture, incremental conversions, incremental CPA and the incrementality level at which brand spend breaks even.","tag":"Experimentation"} -->
+<div class="card">
+  <h3>Method</h3>
+  <div class="radio-cards" id="mode">
+    <label class="radio-card"><input type="radio" name="mode" value="test" checked><span><b>I ran a pause test</b><small>Brand ads were off for a period. Measures organic recapture directly.</small></span></label>
+    <label class="radio-card"><input type="radio" name="mode" value="assume"><span><b>Estimate from assumptions</b><small>No test yet. Model incrementality scenarios and break-even.</small></span></label>
+  </div>
+</div>
+<div id="testBox">
+  <div class="card"><h3>Pause test data</h3>
+    <p class="sub">Daily rows: date, paid brand clicks, organic brand clicks. Optional: spend, paid conversions, organic conversions. Ads ran before the pause date and were off from that date on.</p>
+    <div id="drop"></div>
+    <div class="field" style="margin-top:.6rem"><label for="paste">Or paste CSV</label><textarea id="paste" placeholder="date,paid_clicks,organic_clicks,spend,paid_conversions,organic_conversions"></textarea></div>
+    <div class="row3"><div class="field"><label for="cd">Date</label><select id="cd"></select></div><div class="field"><label for="cp">Paid clicks</label><select id="cp"></select></div><div class="field"><label for="co">Organic clicks</label><select id="co"></select></div></div>
+    <div class="row3"><div class="field"><label for="cs">Spend (optional)</label><select id="cs"></select></div><div class="field"><label for="cv">Paid conversions (optional)</label><select id="cv"></select></div><div class="field"><label for="pd">Pause start date</label><input id="pd" type="date"></div></div>
+  </div>
+</div>
+<div class="card"><h3>Economics</h3><div id="f"></div>
+  <div class="actions"><button class="btn btn-primary" id="go" type="button">Estimate</button><button class="btn btn-secondary btn-sm" id="smp" type="button">Load sample pause test</button></div><div class="err" id="err"></div></div>
+<div id="out"></div>
+<script>
+(function () {
+const $ = MT.$, F = MT.fmt, S = MT.stat, C = MT.chart; let tab = null;
+MT.fields($('#f'), [{ id: 'spend', label: 'Monthly brand ad spend ($)', value: 12000 }, { id: 'clicks', label: 'Monthly paid brand clicks', value: 9000 }, { id: 'cvr', label: 'Brand click conversion rate (%)', value: 8 }, { id: 'val', label: 'Contribution margin per conversion ($)', value: 60 }, { id: 'inc', label: 'Assumed incrementality (%), used when no test', value: 25, hint: 'Share of paid brand clicks that would not have come organically.' }], 'g3');
+const mode = () => document.querySelector('input[name=mode]:checked').value;
+function upd() { $('#testBox').style.display = mode() === 'test' ? '' : 'none'; $('#f_inc').closest('.field').style.display = mode() === 'test' ? 'none' : ''; }
+document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('change', upd)); upd();
+function load(t) { tab = MT.readTable(t, /date|day/i); const c = tab.cols; MT.fillSelect($('#cd'), c, /date|day/i); MT.fillSelect($('#cp'), c, /paid/i); MT.fillSelect($('#co'), c, /organic|seo/i); MT.fillSelect($('#cs'), c, /spend|cost/i, { none: true }); MT.fillSelect($('#cv'), c, /paid.*conv|conv/i, { none: true }); if (!MT.guess(c, /spend|cost/i)) $('#cs').value = ''; if (!MT.guess(c, /conv/i)) $('#cv').value = ''; if (tab.rows.length && !$('#pd').value) { const d = tab.rows.map(r => MT.parseDate(r[$('#cd').value])).filter(isFinite).sort((a, b) => a - b); if (d.length) $('#pd').value = F.date(d[Math.floor(d.length / 2)]); } }
+MT.dropzone($('#drop'), t => { $('#paste').value = t; load(t); }); $('#paste').addEventListener('input', MT.debounce(() => load($('#paste').value), 250));
+$('#smp').addEventListener('click', () => { document.querySelector('input[name=mode][value=test]').checked = true; upd(); const r = MT.rng(5), rows = [['date', 'paid_clicks', 'organic_clicks', 'spend', 'paid_conversions', 'organic_conversions']]; for (let d = 0; d < 56; d++) { const paused = d >= 28, dow = (d % 7 >= 5) ? 0.8 : 1, base = 300 * dow * (0.93 + 0.14 * r.u()), demand = base * (1 + 0.0), paid = paused ? 0 : Math.round(demand * 0.9), org = Math.round(demand * (paused ? 1.0 : 0.72) * (0.95 + 0.1 * r.u())); rows.push([F.date(Date.UTC(2026, 6, 1 + d)), paid, org, paused ? 0 : (paid * 1.33).toFixed(2), Math.round(paid * 0.08), Math.round(org * 0.08)]); } const t = MT.toCSV(rows); $('#paste').value = t; load(t); $('#pd').value = F.date(Date.UTC(2026, 6, 29)); MT.fset('spend', 12000); MT.fset('clicks', 8100); run(); });
+function ci(x, y) { const b = S.bootDiff(x, y, 2000, 9); return b; }
+function run() {
+  $('#err').textContent = ''; const spend = MT.f('spend'), clicks = MT.f('clicks'), cvr = MT.f('cvr') / 100, val = MT.f('val');
+  let inc, lo = NaN, hi = NaN, note = '', recapture = NaN, tdet = '';
+  if (mode() === 'test') {
+    if (!tab) { $('#err').textContent = 'Load pause test data first.'; return; }
+    const pd = MT.parseDate($('#pd').value); if (!isFinite(pd)) { $('#err').textContent = 'Set the pause start date.'; return; }
+    const cd = $('#cd').value, cp = $('#cp').value, co = $('#co').value, pre = [], post = [];
+    tab.rows.forEach(r => { const d = MT.parseDate(r[cd]), p = MT.num(r[cp]), o = MT.num(r[co]); if (!isFinite(d) || !isFinite(p) || !isFinite(o)) return; (d < pd ? pre : post).push({ d, p, o }); });
+    if (pre.length < 7 || post.length < 7) { $('#err').textContent = `Need at least 7 days before and after the pause (found ${pre.length} and ${post.length}).`; return; }
+    const paidPre = S.mean(pre.map(x => x.p)), orgPre = pre.map(x => x.o), orgPost = post.map(x => x.o), dOrg = S.mean(orgPost) - S.mean(orgPre), dNet = paidPre + S.mean(orgPre) - (S.mean(post.map(x => x.p)) + S.mean(orgPost));
+    recapture = Math.min(1, Math.max(0, dOrg / paidPre)); const w = S.welch(orgPost, orgPre), b = ci(orgPost, orgPre);
+    inc = 1 - recapture; const rLo = Math.max(0, b.lo / paidPre), rHi = Math.min(1, b.hi / paidPre); lo = 1 - rHi; hi = 1 - rLo;
+    tdet = `Organic brand clicks rose from ${F.int(S.mean(orgPre))} to ${F.int(S.mean(orgPost))} per day after the pause (Welch p ${F.p(w.p)}). Total brand clicks fell by ${F.int(Math.max(0, dNet))} per day, so paid ads added that many clicks. Recapture rate ${F.pct(recapture, 0)} (bootstrap 95% CI ${F.pct(rLo, 0)} to ${F.pct(rHi, 0)}).`;
+    if (w.p > 0.1) note = 'The organic change is not statistically distinguishable from noise, so the incrementality range is wide. Extend the test or compare against a matched control period.';
+    const sc = $('#cs').value, vc = $('#cv').value; if (sc && vc) { const ps = S.sum(pre.map((_, i) => 0)); void ps; }
+  } else { inc = MT.f('inc') / 100; }
+  const convPaid = clicks * cvr, incConv = convPaid * inc, iCPA = incConv > 0 ? spend / incConv : Infinity, cpa = convPaid > 0 ? spend / convPaid : Infinity, be = spend / Math.max(convPaid * val, 1e-9), net = incConv * val - spend;
+  const kind = net >= 0 ? 'pos' : 'neg';
+  let h = MT.verdict(net >= 0 ? 'pos' : 'neg', `Paid brand is ${F.pct(inc, 0)} incremental${isFinite(lo) ? ` (95% CI ${F.pct(lo, 0)} to ${F.pct(hi, 0)})` : ''}, real CPA ${isFinite(iCPA) ? F.money(iCPA, 2) : 'undefined'}`, `Reported CPA is ${F.money(cpa, 2)}, but only ${F.int(incConv)} of ${F.int(convPaid)} monthly conversions are incremental. At ${F.money(val, 0)} margin per conversion the program ${net >= 0 ? 'earns' : 'loses'} ${F.money(Math.abs(net), 0)} per month. Break-even incrementality is ${F.pct(Math.min(be, 9.99), 0)}${be > 1 ? ', which is above 100%, so it cannot pay back at this CPA' : ''}.`);
+  h += MT.stats([['Incrementality', F.pct(inc, 0), isFinite(lo) ? `CI ${F.pct(lo, 0)} to ${F.pct(hi, 0)}` : 'assumed'], ['Reported CPA', F.money(cpa, 2), 'spend / all paid conversions'], ['Incremental CPA', isFinite(iCPA) ? F.money(iCPA, 2) : '—', 'spend / incremental conversions', iCPA <= val ? 'good' : 'bad'], ['Break-even incrementality', F.pct(be, 0), 'margin ' + F.money(val, 0) + ' per conversion', inc >= be ? 'good' : 'bad'], ['Net monthly contribution', F.money(net, 0), 'after ad spend', net >= 0 ? 'good' : 'bad']]);
+  if (tdet) h += MT.note(MT.esc(tdet)); if (note) h += MT.note('<b>Caution.</b> ' + MT.esc(note));
+  const levels = [5, 10, 15, 25, 35, 50, 75, 100];
+  h += '<div class="card"><h3>Sensitivity</h3>' + MT.tbl(['Incrementality', 'Incremental conversions', 'Incremental CPA', 'Net contribution'], levels.map(x => { const c = convPaid * x / 100, n = c * val - spend; return [x + '%', F.int(c), c > 0 ? F.money(spend / c, 2) : '—', { h: `<span style="display:block;padding:.15rem .3rem;${MT.cellTone(n >= 0 ? 'good' : 'bad')}">${F.money(n, 0)}</span>`, cls: 'c' }]; }), { cls: 'heat', num: [1, 2, 3] }) + '</div>';
+  h += '<div class="card"><div id="c1"></div></div>';
+  h += MT.note('<b>Scope.</b> A pause test measures brand clicks the ads add when no competitor bids on your name and organic ranks first. If competitors conquest your brand terms, pausing raises their share and true incrementality is higher than a pause test shows. Run the test for at least two full weeks and avoid promotions and launches inside the window.');
+  $('#out').innerHTML = h;
+  C.bars($('#c1'), { title: 'Monthly conversions: reported vs incremental', cats: ['Reported', 'Incremental'], series: [{ name: 'Conversions', values: [convPaid, incConv], color: 'var(--series-1)' }], yFmt: v => F.int(v) });
+}
+$('#go').addEventListener('click', run);
+})();
+</script>

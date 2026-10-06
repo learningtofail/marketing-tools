@@ -1,0 +1,63 @@
+<!--META {"title":"UTM Governance Auditor","short":"Find inconsistent UTM naming, case splits and missing parameters that fragment your channel reporting.","desc":"Paste campaign URLs or a traffic export. The tool validates UTM parameters against your naming convention, detects case and spelling variants that split channels, and lists rows to fix.","tag":"Data governance"} -->
+<div class="card"><h3>Input</h3>
+  <p class="sub">Paste one URL per line, or upload a CSV with a URL column (optionally with sessions). Rows with sessions weight the impact of each problem.</p>
+  <div id="drop"></div>
+  <div class="field" style="margin-top:.6rem"><label for="paste">URLs or CSV</label><textarea id="paste" rows="7" placeholder="https://example.com/?utm_source=Facebook&utm_medium=cpc&utm_campaign=Summer_Sale"></textarea></div>
+  <div id="colbox" class="row2" style="display:none"><div class="field"><label for="cu">URL column</label><select id="cu"></select></div><div class="field"><label for="cs">Sessions column (optional)</label><select id="cs"></select></div></div>
+</div>
+<div class="card"><h3>Naming convention</h3><div id="f"></div>
+  <div class="row2"><div class="field"><label for="srcs">Approved sources (comma separated, blank to skip)</label><textarea id="srcs" rows="2">google, facebook, instagram, linkedin, tiktok, bing, youtube, newsletter, x, reddit</textarea></div><div class="field"><label for="meds">Approved mediums</label><textarea id="meds" rows="2">cpc, paid_social, email, organic_social, display, affiliate, referral, video, sms</textarea></div></div>
+  <div class="actions"><button class="btn btn-primary" id="go" type="button">Audit</button><button class="btn btn-secondary btn-sm" id="smp" type="button">Load sample</button></div><div class="err" id="err"></div></div>
+<div id="out"></div>
+<script>
+(function () {
+const $ = MT.$, F = MT.fmt, S = MT.stat, C = MT.chart;
+MT.fields($('#f'), [{ id: 'case', label: 'Require lowercase', type: 'check', value: true }, { id: 'sp', label: 'Disallow spaces and special characters', type: 'check', value: true }, { id: 'req', label: 'Require utm_campaign', type: 'check', value: true }, { id: 'cont', label: 'Warn when utm_content is missing on paid media', type: 'check', value: false }, { id: 'sep', label: 'Separator', type: 'select', value: '_', options: [['_', 'Underscore'], ['-', 'Hyphen'], ['', 'No preference']] }, { id: 'maxl', label: 'Max campaign length', value: 60 }], 'g3');
+$('#smp').addEventListener('click', () => { $('#paste').value = `https://shop.example.com/?utm_source=facebook&utm_medium=paid_social&utm_campaign=summer_sale_2026
+https://shop.example.com/?utm_source=Facebook&utm_medium=paid_social&utm_campaign=summer_sale_2026
+https://shop.example.com/?utm_source=fb&utm_medium=Paid%20Social&utm_campaign=Summer-Sale-2026
+https://shop.example.com/?utm_source=google&utm_medium=cpc&utm_campaign=brand_search
+https://shop.example.com/?utm_source=google&utm_medium=CPC&utm_campaign=brand_search
+https://shop.example.com/?utm_source=google&utm_medium=ppc&utm_campaign=nonbrand%20shoes
+https://shop.example.com/?utm_source=newsletter&utm_medium=email
+https://shop.example.com/?utm_source=newsletter&utm_medium=email&utm_campaign=weekly_digest_0912
+https://shop.example.com/?utm_source=linkedin&utm_medium=social&utm_campaign=b2b_launch
+https://shop.example.com/?utm_medium=cpc&utm_campaign=orphan_no_source
+https://shop.example.com/?utm_source=tiktok&utm_medium=paid_social&utm_campaign=ugc%20test&utm_content=Video A`; run(); });
+MT.dropzone($('#drop'), t => { $('#paste').value = t; detect(); }); $('#paste').addEventListener('input', MT.debounce(detect, 250));
+let tab = null;
+function detect() { const t = $('#paste').value; if (/^\s*https?:\/\//im.test(t) && !/,/.test(t.split('\n')[0].replace(/\?[^ ]*/, ''))) { $('#colbox').style.display = 'none'; tab = null; return; } tab = MT.readTable(t, /url|link|landing/i); if (tab.cols.length > 1) { $('#colbox').style.display = ''; MT.fillSelect($('#cu'), tab.cols, /url|link|landing|page/i); MT.fillSelect($('#cs'), tab.cols, /session|visit|click/i, { none: true }); if (!MT.guess(tab.cols, /session|visit|click/i)) $('#cs').value = ''; } else { $('#colbox').style.display = 'none'; tab = null; } }
+function parse(u) { let q = u.split('#')[0]; const i = q.indexOf('?'); const out = {}; if (i < 0) return out; q.slice(i + 1).split('&').forEach(p => { if (!p) return; const j = p.indexOf('='); let k = j < 0 ? p : p.slice(0, j), v = j < 0 ? '' : p.slice(j + 1); try { k = decodeURIComponent(k.replace(/\+/g, ' ')); v = decodeURIComponent(v.replace(/\+/g, ' ')); } catch (e) { } out[k] = v; }); return out; }
+function lev(a, b) { const m = a.length, n = b.length; if (Math.abs(m - n) > 3) return 9; const d = Array.from({ length: m + 1 }, (_, i) => [i]); for (let j = 1; j <= n; j++) d[0][j] = j; for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); return d[m][n]; }
+function run() {
+  $('#err').textContent = ''; let rows = [];
+  if (tab && $('#cu').value) { const cu = $('#cu').value, cs = $('#cs').value; rows = tab.rows.map(r => ({ url: String(r[cu]).trim(), w: cs ? MT.num(r[cs]) || 0 : 1 })); } else rows = $('#paste').value.split('\n').map(s => s.trim()).filter(Boolean).map(u => ({ url: u, w: 1 }));
+  rows = rows.filter(r => /\?/.test(r.url) || /^https?:/.test(r.url)); if (!rows.length) { $('#err').textContent = 'No URLs found.'; return; }
+  const srcOk = $('#srcs').value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean), medOk = $('#meds').value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean), lc = MT.f('case'), sp = MT.f('sp'), req = MT.f('req'), cont = MT.f('cont'), sep = MT.f('sep'), maxl = MT.f('maxl') || 60;
+  const issues = new Map(), bump = (k, sev) => { const o = issues.get(k) || { k, n: 0, w: 0, sev }; return o; };
+  const res = rows.map(r => { const p = parse(r.url), iss = [], add = (t, s) => iss.push({ t, s });
+    const s = p.utm_source, m = p.utm_medium, c = p.utm_campaign;
+    if (!Object.keys(p).some(k => /^utm_/i.test(k))) add('No UTM parameters', 'high');
+    else { if (s == null || s === '') add('Missing utm_source', 'high'); if (m == null || m === '') add('Missing utm_medium', 'high'); if (req && (c == null || c === '')) add('Missing utm_campaign', 'high'); if (cont && !p.utm_content && /cpc|paid|display|video/i.test(m || '')) add('Missing utm_content on paid media', 'low'); }
+    Object.keys(p).forEach(k => { if (/^utm_/i.test(k) && k !== k.toLowerCase()) add(`Parameter name "${k}" not lowercase`, 'med'); if (/^utm_/i.test(k) && !['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'utm_id'].includes(k.toLowerCase())) add(`Unknown UTM parameter "${k}"`, 'low'); });
+    [['source', s], ['medium', m], ['campaign', c], ['content', p.utm_content], ['term', p.utm_term]].forEach(([n, v]) => { if (v == null || v === '') return; if (lc && v !== v.toLowerCase()) add(`utm_${n} has uppercase ("${v}")`, 'med'); if (sp && /[\s]/.test(v)) add(`utm_${n} contains spaces ("${v}")`, 'high'); if (sp && /[^a-zA-Z0-9_\-.\s]/.test(v)) add(`utm_${n} contains special characters ("${v}")`, 'med'); if (sep && n === 'campaign') { const bad = sep === '_' ? '-' : '_'; if (v.includes(bad)) add(`utm_campaign uses "${bad}" instead of "${sep}"`, 'low'); } });
+    if (s && srcOk.length && !srcOk.includes(s.toLowerCase())) add(`Unapproved source "${s}"`, 'med'); if (m && medOk.length && !medOk.includes(m.toLowerCase().replace(/\s+/g, '_'))) add(`Unapproved medium "${m}"`, 'med'); if (c && c.length > maxl) add(`utm_campaign longer than ${maxl} characters`, 'low');
+    return { r, p, iss }; });
+  // variant groups
+  const groups = (key) => { const m = new Map(); res.forEach(x => { const v = x.p[key]; if (!v) return; const norm = v.toLowerCase().replace(/[\s_\-]+/g, ''); const g = m.get(norm) || new Map(); g.set(v, (g.get(v) || 0) + x.r.w); m.set(norm, g); }); return Array.from(m.entries()).filter(([, g]) => g.size > 1).map(([n, g]) => ({ key, variants: Array.from(g.entries()).sort((a, b) => b[1] - a[1]) })); };
+  const vs = [].concat(groups('utm_source'), groups('utm_medium'), groups('utm_campaign'));
+  ['utm_source', 'utm_medium'].forEach(key => { const vals = Array.from(new Set(res.map(x => x.p[key]).filter(Boolean).map(v => v.toLowerCase()))); for (let i = 0; i < vals.length; i++) for (let j = i + 1; j < vals.length; j++) { if (vals[i].replace(/[\s_\-]+/g, '') === vals[j].replace(/[\s_\-]+/g, '')) continue; if (lev(vals[i], vals[j]) <= 1 && Math.min(vals[i].length, vals[j].length) >= 3) vs.push({ key, variants: [[vals[i], 0], [vals[j], 0]], near: true }); } });
+  const bad = res.filter(x => x.iss.length), high = res.filter(x => x.iss.some(i => i.s === 'high')), totalW = S.sum(res.map(x => x.r.w)), badW = S.sum(bad.map(x => x.r.w)), score = Math.round(100 * (1 - badW / totalW));
+  const tally = new Map(); res.forEach(x => x.iss.forEach(i => { const k = i.t.replace(/"[^"]*"|\([^)]*\)/g, '').replace(/\s+/g, ' ').trim(), o = tally.get(k) || { t: k, s: i.s, n: 0, w: 0 }; o.n++; o.w += x.r.w; tally.set(k, o); }));
+  const sevTag = s => MT.tag(s === 'high' ? 'High' : s === 'med' ? 'Medium' : 'Low', s === 'high' ? 'bad' : s === 'med' ? 'warn' : '');
+  let h = MT.rag(score >= 90 ? 'green' : score >= 70 ? 'yellow' : 'red', `Governance score ${score} out of 100`, [`${bad.length} of ${res.length} URLs break the convention; ${high.length} have blocking problems.`, vs.length ? `${vs.length} source, medium or campaign values split into variants and fragment reporting.` : 'No variant splits detected.']);
+  h += MT.stats([['URLs audited', F.int(res.length), ''], ['Clean URLs', F.int(res.length - bad.length), F.pct(1 - bad.length / res.length, 0)], ['Blocking issues', F.int(high.length), 'missing or unusable parameters', high.length ? 'bad' : 'good'], ['Variant splits', String(vs.length), 'values needing merge', vs.length ? 'warn' : 'good']]);
+  if (vs.length) h += '<div class="card"><h3>Values that split one channel</h3><p class="sub">Each row is one real thing reported under several spellings. Pick a canonical value and redirect the rest.</p>' + MT.tbl(['Parameter', 'Variants found', 'Suggested canonical'], vs.map(v => [v.key, v.variants.map(x => x[0] + (x[1] ? ' (' + F.int(x[1]) + ')' : '')).join('  |  '), v.variants[0][0].toLowerCase().replace(/[\s\-]+/g, '_')])) + '</div>';
+  h += '<div class="card"><h3>Issue summary</h3>' + MT.tbl(['Issue', 'Severity', 'URLs', ...(res.some(x => x.r.w !== 1) ? ['Weighted volume'] : [])], Array.from(tally.values()).sort((a, b) => b.w - a.w).map(o => [o.t, { h: sevTag(o.s) }, o.n, ...(res.some(x => x.r.w !== 1) ? [F.int(o.w)] : [])]), { num: [2, 3] }) + '</div>';
+  h += '<div class="card"><h3>Rows to fix</h3>' + MT.tbl(['URL', 'Problems'], bad.slice(0, 60).map(x => [x.r.url.length > 90 ? x.r.url.slice(0, 89) + '…' : x.r.url, x.iss.map(i => i.t).join('; ')])) + '<div class="actions"><button class="btn btn-secondary btn-sm" id="dl" type="button">Download audit CSV</button></div></div>';
+  $('#out').innerHTML = h;
+  $('#dl').addEventListener('click', () => MT.download('utm-audit.csv', MT.toCSV([['url', 'weight', 'issues']].concat(res.map(x => [x.r.url, x.r.w, x.iss.map(i => i.t).join('; ')]))), 'text/csv'));
+}
+$('#go').addEventListener('click', run);
+})();
+</script>

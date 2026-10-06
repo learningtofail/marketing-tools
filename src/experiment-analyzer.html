@@ -1,0 +1,282 @@
+<!--META {"title":"A/B, Multivariate & Campaign Experiment Analyzer","short":"Was the result real, and was it good or bad? Picks the right model for A/B, multivariate and non-randomized campaign data.","desc":"Test A/B, A/B/n, multivariate and non-randomized campaign results. The tool inspects your design and data, picks the statistically appropriate model, and tells you whether the change was significant and whether it helped or hurt.","tag":"Flagship","needs":["experiment-engine.js","samples.js"]} -->
+<div class="card">
+  <h2>1. What kind of test is this?</h2>
+  <p class="sub">The design decides the model. Randomized splits can be compared directly. Without a random holdout, the tool builds a counterfactual from control series or history, following the decision tree in the causal inference guide.</p>
+  <div class="radio-cards" role="radiogroup" aria-label="Test design">
+    <label><input type="radio" name="mode" value="ab" checked><b>A/B or A/B/n test</b><span>Visitors were randomly split between a control and one or more variants of one thing.</span></label>
+    <label><input type="radio" name="mode" value="mv"><b>Multivariate (factorial) test</b><span>Several elements (headline, image, offer) were varied together across random combinations.</span></label>
+    <label><input type="radio" name="mode" value="qx"><b>No random holdout</b><span>Geo test, regional rollout, before/after launch, or a campaign with control markets or none.</span></label>
+  </div>
+  <div class="row3">
+    <div class="field"><label for="alpha">Significance level</label><select id="alpha"><option value="0.10">0.10 (90% confidence)</option><option value="0.05" selected>0.05 (95% confidence)</option><option value="0.01">0.01 (99% confidence)</option></select></div>
+    <div class="field"><label for="better">Which direction is good?</label><select id="better"><option value="high">Higher is better (conversions, revenue)</option><option value="low">Lower is better (cost, CPA, churn)</option></select></div>
+    <div class="field"><label for="minEff">Smallest effect worth acting on (optional)</label><input id="minEff" type="number" min="0" step="0.1" placeholder="Relative %, e.g. 2"><span class="hint">Significant effects below this are flagged as too small to matter.</span></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>2. Add your data</h2>
+
+  <div id="pAB">
+    <div class="row3">
+      <div class="field"><label for="abMetric">What is measured?</label><select id="abMetric"><option value="binary">Conversion (converted or not)</option><option value="continuous">Value per visitor (revenue, order value, time)</option></select></div>
+      <div class="field"><label for="abFmt">How is your data shaped?</label><select id="abFmt"><option value="table">Summary numbers per variant</option><option value="raw">Raw rows (one row per visitor)</option></select></div>
+      <div class="field"><label for="abSplit">Planned traffic split (optional)</label><input id="abSplit" type="text" placeholder="Equal. Or e.g. 50,25,25"><span class="hint">Used for the sample ratio mismatch check.</span></div>
+    </div>
+    <div id="abTableBox"><div id="abRows"></div><div class="actions"><button class="btn btn-secondary btn-sm" id="abAdd" type="button">Add variant</button><span class="hint muted">The first row is the control.</span></div></div>
+    <div id="abRawBox" hidden>
+      <div id="abDrop"></div>
+      <div class="field" style="margin-top:.6rem"><label for="abPaste">Or paste CSV</label><textarea id="abPaste" placeholder="variant,converted&#10;control,0&#10;new,1"></textarea></div>
+      <div class="row3">
+        <div class="field"><label for="abVar">Variant column</label><select id="abVar"></select></div>
+        <div class="field"><label for="abOut">Outcome column</label><select id="abOut"></select></div>
+        <div class="field"><label for="abCtrl">Control variant</label><select id="abCtrl"></select></div>
+      </div>
+    </div>
+    <div class="actions"><span class="lbl">Try a sample:</span><button class="btn btn-secondary btn-sm" data-s="ab2" type="button">A/B conversion</button><button class="btn btn-secondary btn-sm" data-s="abn" type="button">A/B/n conversion</button><button class="btn btn-secondary btn-sm" data-s="abcont" type="button">Revenue per visitor (raw)</button></div>
+  </div>
+
+  <div id="pMV" hidden>
+    <div id="mvDrop"></div>
+    <div class="field" style="margin-top:.6rem"><label for="mvPaste">Or paste CSV</label><textarea id="mvPaste" placeholder="headline,image,cta,visitors,conversions&#10;Original,Photo A,Buy now,3000,151"></textarea></div>
+    <div class="row3">
+      <div class="field"><label for="mvMetric">What is measured?</label><select id="mvMetric"><option value="binary">Conversion (converted or not)</option><option value="continuous">Value per visitor</option></select></div>
+      <div class="field"><label for="mvLayout">Rows are</label><select id="mvLayout"><option value="agg">One per combination (with visitor counts)</option><option value="raw">One per visitor</option></select></div>
+      <div class="field"><label>Include two-way interactions</label><div class="checks"><label><input type="checkbox" id="mvInter" checked> Test whether elements interact</label></div></div>
+    </div>
+    <div class="field"><label>Elements varied (factor columns)</label><div class="checks" id="mvFactors"></div></div>
+    <div class="row3">
+      <div class="field"><label for="mvOut" id="mvOutL">Conversions column</label><select id="mvOut"></select></div>
+      <div class="field" id="mvNBox"><label for="mvN">Visitors column</label><select id="mvN"></select></div>
+      <div class="field" id="mvSdBox" hidden><label for="mvSd">Standard deviation column</label><select id="mvSd"></select></div>
+    </div>
+    <div class="field"><label>Baseline (control) level of each element</label><div class="row3" id="mvBase"></div></div>
+    <div class="actions"><span class="lbl">Try a sample:</span><button class="btn btn-secondary btn-sm" data-s="mvb" type="button">3 elements, conversion</button><button class="btn btn-secondary btn-sm" data-s="mvc" type="button">2 elements, revenue (raw)</button></div>
+  </div>
+
+  <div id="pQX" hidden>
+    <div id="qxDrop"></div>
+    <div class="field" style="margin-top:.6rem"><label for="qxPaste">Or paste CSV</label><textarea id="qxPaste" placeholder="date,treated,control_1,control_2&#10;2026-01-01,1204,980,1105"></textarea></div>
+    <div class="row3">
+      <div class="field"><label for="qxFmt">Layout</label><select id="qxFmt"><option value="wide">Wide: one column per market or series</option><option value="long">Long: date, unit, value</option></select></div>
+      <div class="field"><label for="qxDate">Date column</label><select id="qxDate"></select></div>
+      <div class="field"><label for="qxEvent">Launch date (first day exposed)</label><input id="qxEvent" type="date"></div>
+    </div>
+    <div id="qxWide">
+      <div class="row2"><div class="field"><label for="qxTreated">Treated series (metric where the campaign ran)</label><select id="qxTreated"></select></div><div></div></div>
+      <div class="field"><label>Control series (unexposed markets or channels)</label><div class="checks" id="qxCtrls"></div><span class="hint">Leave none checked if you have no unexposed comparison.</span></div>
+      <div class="field"><label>Time-varying covariates (optional: promo calendar, category demand, non-test spend)</label><div class="checks" id="qxCovs"></div></div>
+    </div>
+    <div id="qxLong" hidden>
+      <div class="row3"><div class="field"><label for="qxUnit">Unit column (market)</label><select id="qxUnit"></select></div><div class="field"><label for="qxVal">Value column</label><select id="qxVal"></select></div><div class="field"><label for="qxTUnit">Treated unit</label><select id="qxTUnit"></select></div></div>
+    </div>
+    <details><summary>Advanced options</summary>
+      <div class="row3">
+        <div class="field"><label for="qxSeason">Seasonality</label><select id="qxSeason"><option value="auto">Auto (from date spacing)</option><option value="0">None</option><option value="7">Weekly (7)</option><option value="12">Monthly data, yearly (12)</option><option value="52">Weekly data, yearly (52)</option></select></div>
+        <div class="field"><label for="qxForce">Model</label><select id="qxForce"><option value="auto">Auto-select (recommended)</option><option value="its">Interrupted time series</option><option value="did">Difference-in-differences</option><option value="its_ctrl">ITS with control regressors</option><option value="scm">Synthetic control</option><option value="bsts">Bayesian structural time series</option><option value="prepost">Pre/post comparison</option></select></div>
+        <div class="field"><label for="qxDraws">Bayesian draws</label><select id="qxDraws"><option value="500">500 (fast)</option><option value="1000" selected>1000</option><option value="2500">2500 (precise)</option></select></div>
+      </div>
+      <div class="checks"><label><input type="checkbox" id="qxCross" checked> Also run a second model as a cross-check</label></div>
+    </details>
+    <div class="actions"><span class="lbl">Try a sample:</span><button class="btn btn-secondary btn-sm" data-s="geo" type="button">Geo test, 12 markets</button><button class="btn btn-secondary btn-sm" data-s="geocov" type="button">Geo test with covariate</button><button class="btn btn-secondary btn-sm" data-s="one" type="button">One control market</button><button class="btn btn-secondary btn-sm" data-s="none" type="button">No control, long history</button><button class="btn btn-secondary btn-sm" data-s="short" type="button">No control, short history</button></div>
+  </div>
+</div>
+
+<div class="actions"><button class="btn btn-primary" id="run" type="button">Analyze</button><span id="status" class="muted" role="status"></span></div>
+<div id="err" class="err" role="alert"></div>
+<div id="results"></div>
+
+<script>
+(function () {
+const $ = MT.$, F = MT.fmt, E = MT.exp, S = MT.stat, C = MT.chart, esc = MT.esc;
+let mode = 'ab', abRows = [], lastRes = null;
+const opts = () => { const me = parseFloat($('#minEff').value); return { alpha: +$('#alpha').value, better: $('#better').value, minEff: isFinite(me) && me > 0 ? me / 100 : null }; };
+
+/* ---------- mode switching ---------- */
+MT.$$('input[name=mode]').forEach(r => r.addEventListener('change', () => { mode = r.value; ['ab', 'mv', 'qx'].forEach(m => $('#p' + m.toUpperCase()).hidden = m !== mode); $('#results').innerHTML = ''; $('#err').textContent = ''; }));
+const setMode = m => { const r = MT.$(`input[name=mode][value=${m}]`); r.checked = true; r.dispatchEvent(new Event('change')); };
+
+/* ---------- A/B table ---------- */
+function renderAb() {
+  const bin = $('#abMetric').value === 'binary';
+  const head = bin ? ['Variant', 'Visitors', 'Conversions'] : ['Variant', 'Observations (n)', 'Mean', 'Standard deviation'];
+  $('#abRows').innerHTML = `<div class="table-wrap"><table class="t"><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}<th></th></tr></thead><tbody>${abRows.map((r, i) => `<tr><td><input type="text" data-i="${i}" data-k="name" value="${esc(r.name)}" aria-label="Variant name"></td><td><input type="number" min="0" data-i="${i}" data-k="n" value="${r.n ?? ''}" aria-label="Visitors"></td>${bin ? `<td><input type="number" min="0" data-i="${i}" data-k="x" value="${r.x ?? ''}" aria-label="Conversions"></td>` : `<td><input type="number" step="any" data-i="${i}" data-k="mean" value="${r.mean ?? ''}" aria-label="Mean"></td><td><input type="number" step="any" min="0" data-i="${i}" data-k="sd" value="${r.sd ?? ''}" aria-label="Standard deviation"></td>`}<td>${i > 1 ? `<button class="btn btn-ghost btn-sm" data-del="${i}" type="button" aria-label="Remove variant">Remove</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+}
+$('#abRows').addEventListener('input', e => { const t = e.target; if (t.dataset.i == null) return; const r = abRows[+t.dataset.i], k = t.dataset.k; r[k] = k === 'name' ? t.value : (t.value === '' ? null : +t.value); });
+$('#abRows').addEventListener('click', e => { const d = e.target.dataset.del; if (d != null) { abRows.splice(+d, 1); renderAb(); } });
+$('#abAdd').addEventListener('click', () => { abRows.push({ name: 'Variant ' + String.fromCharCode(65 + abRows.length - 1), n: null, x: null, mean: null, sd: null }); renderAb(); });
+$('#abMetric').addEventListener('change', renderAb);
+$('#abFmt').addEventListener('change', () => { const raw = $('#abFmt').value === 'raw'; $('#abTableBox').hidden = raw; $('#abRawBox').hidden = !raw; });
+let abTab = null;
+function abLoad(text) { abTab = MT.readTable(text); const c = abTab.cols; MT.fillSelect($('#abVar'), c, /variant|group|arm|test|bucket|cell/i); MT.fillSelect($('#abOut'), c.filter(x => x !== $('#abVar').value).concat(c.filter(x => x === $('#abVar').value)), /convert|conv|outcome|revenue|value|purchase|success|order/i); abCtrls(); }
+function abCtrls() { if (!abTab) return; const v = $('#abVar').value, lv = Array.from(new Set(abTab.rows.map(r => String(r[v]).trim()))).sort(); $('#abCtrl').innerHTML = lv.map(l => `<option>${esc(l)}</option>`).join(''); const g = lv.find(l => /control|baseline|default|original|^a$/i.test(l)); if (g) $('#abCtrl').value = g; }
+$('#abVar').addEventListener('change', abCtrls);
+MT.dropzone($('#abDrop'), t => { $('#abPaste').value = t; abLoad(t); });
+$('#abPaste').addEventListener('input', MT.debounce(() => abLoad($('#abPaste').value), 250));
+
+function readAB(o) {
+  const bin = $('#abMetric').value === 'binary'; let groups;
+  if ($('#abFmt').value === 'table') {
+    groups = abRows.filter(r => r.name && (r.n || r.n === 0)).map(r => bin ? { name: r.name.trim(), n: r.n, x: r.x == null ? NaN : r.x } : { name: r.name.trim(), n: r.n, mean: r.mean, sd: r.sd });
+    groups.forEach(g => { if (bin && !isFinite(g.x)) throw new Error(`Enter conversions for "${g.name}".`); if (!bin && (g.mean == null || g.sd == null)) throw new Error(`Enter mean and standard deviation for "${g.name}".`); });
+  } else {
+    if (!abTab) throw new Error('Paste or upload your CSV first.');
+    const vc = $('#abVar').value, oc = $('#abOut').value, ctrl = $('#abCtrl').value, m = new Map();
+    if (vc === oc) throw new Error('Variant and outcome must be different columns.');
+    abTab.rows.forEach(r => { const k = String(r[vc]).trim(); let v = r[oc]; if (bin) { const s = String(v).trim().toLowerCase(); v = ['1', 'true', 'yes', 'y', 'converted', 'purchase'].includes(s) ? 1 : ['0', 'false', 'no', 'n', ''].includes(s) ? 0 : (MT.num(v) > 0 ? 1 : 0); } else { v = MT.num(v); if (!isFinite(v)) return; } if (!m.has(k)) m.set(k, []); m.get(k).push(v); });
+    const names = [ctrl].concat(Array.from(m.keys()).filter(k => k !== ctrl).sort()); if (!m.has(ctrl)) throw new Error('Control variant not found.');
+    groups = names.map(k => { const a = m.get(k); return bin ? { name: k, n: a.length, x: S.sum(a) } : { name: k, raw: a, n: a.length }; });
+  }
+  const sp = $('#abSplit').value.trim(); if (sp) { const w = sp.split(/[,\s:\/]+/).map(Number).filter(isFinite); if (w.length !== groups.length) throw new Error(`Planned split has ${w.length} numbers but there are ${groups.length} variants.`); o.split = w; }
+  return groups;
+}
+
+/* ---------- multivariate ---------- */
+let mvTab = null;
+function mvLoad(text) {
+  mvTab = MT.readTable(text); const c = mvTab.cols; MT.fillChecks($('#mvFactors'), c, 'mvf', x => !/visitor|session|user|count|conversion|revenue|mean|sd|std|^n$|order|value|click/i.test(x) && Array.from(new Set(mvTab.rows.map(r => r[x]))).length <= 8 && Array.from(new Set(mvTab.rows.map(r => r[x]))).length >= 2);
+  const num = c.filter(x => mvTab.rows.slice(0, 50).every(r => isFinite(MT.num(r[x]))));
+  MT.fillSelect($('#mvOut'), c, /conversion|convert|revenue|outcome|mean|value|purchase/i); MT.fillSelect($('#mvN'), c, /visitor|session|user|^n$|count|trial|impression/i); MT.fillSelect($('#mvSd'), c, /^sd$|std|deviation/i);
+  $('#mvFactors').addEventListener('change', mvBase); mvBase(); mvLayout();
+}
+function mvBase() { if (!mvTab) return; const f = MT.checked($('#mvFactors')); $('#mvBase').innerHTML = f.map(x => { const lv = Array.from(new Set(mvTab.rows.map(r => String(r[x]).trim()))).sort(); const g = lv.find(l => /^(control|baseline|default|original|current|none|a\b)/i.test(l)) || lv[0]; return `<div class="field"><label>${esc(x)}</label><select data-f="${esc(x)}">${lv.map(l => `<option ${l === g ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>`; }).join(''); }
+function mvLayout() { const raw = $('#mvLayout').value === 'raw', bin = $('#mvMetric').value === 'binary'; $('#mvNBox').hidden = raw; $('#mvSdBox').hidden = raw || bin; $('#mvOutL').textContent = raw ? (bin ? 'Outcome column (0/1)' : 'Value column') : (bin ? 'Conversions column' : 'Mean column'); }
+$('#mvLayout').addEventListener('change', mvLayout); $('#mvMetric').addEventListener('change', mvLayout);
+MT.dropzone($('#mvDrop'), t => { $('#mvPaste').value = t; mvLoad(t); }); $('#mvPaste').addEventListener('input', MT.debounce(() => mvLoad($('#mvPaste').value), 250));
+function readMV(o) {
+  if (!mvTab) throw new Error('Paste or upload your CSV first.'); const f = MT.checked($('#mvFactors')); if (f.length < 2) throw new Error('Select at least two factor columns. For a single element use A/B/n.');
+  const bin = $('#mvMetric').value === 'binary', raw = $('#mvLayout').value === 'raw', oc = $('#mvOut').value, nc = $('#mvN').value, sc = $('#mvSd').value, map = new Map();
+  o.factors = f; o.metric = bin ? 'binary' : 'continuous'; o.interactions = $('#mvInter').checked; o.base = {}; MT.$$('#mvBase select').forEach(s => o.base[s.dataset.f] = s.value);
+  mvTab.rows.forEach(r => { const lv = {}; f.forEach(x => lv[x] = String(r[x]).trim()); const key = f.map(x => lv[x]).join('\u0001'); if (!map.has(key)) map.set(key, { lv, n: 0, s: 0, ys: [], _rows: [] });
+    const c = map.get(key);
+    if (raw) { let v = MT.num(r[oc]); if (bin) { const s = String(r[oc]).trim().toLowerCase(); v = ['1', 'true', 'yes'].includes(s) ? 1 : ['0', 'false', 'no', ''].includes(s) ? 0 : (v > 0 ? 1 : 0); } if (!isFinite(v)) return; c.n++; c.s += v; c.ys.push(v); }
+    else { const n = MT.num(r[nc]), v = MT.num(r[oc]); if (!isFinite(n) || !isFinite(v)) return; c.n += n; if (bin) c.s += v; else c._rows.push({ n, mean: v, sd: MT.num(r[sc]) }); } });
+  return Array.from(map.values()).map(c => { if (bin) return { lv: c.lv, n: c.n, s: c.s }; if (raw) return { lv: c.lv, n: c.n, mean: S.mean(c.ys), sd: S.sd(c.ys) }; const r0 = c._rows[0]; if (c._rows.length > 1) { const N = S.sum(c._rows.map(z => z.n)), m = S.sum(c._rows.map(z => z.n * z.mean)) / N; let ss = S.sum(c._rows.map(z => (z.n - 1) * z.sd * z.sd + z.n * (z.mean - m) ** 2)); return { lv: c.lv, n: N, mean: m, sd: Math.sqrt(ss / (N - 1)) }; } if (!isFinite(r0.sd)) throw new Error('Standard deviation column is required for aggregated continuous data.'); return { lv: c.lv, n: r0.n, mean: r0.mean, sd: r0.sd }; });
+}
+
+/* ---------- quasi-experimental ---------- */
+let qxTab = null;
+function qxLoad(text) {
+  qxTab = MT.readTable(text); const c = qxTab.cols; qxCols(c);
+}
+function qxCols(c) {
+  MT.fillSelect($('#qxDate'), c, /date|day|week|month|period|time/i); const dc = $('#qxDate').value, rest = c.filter(x => x !== dc);
+  MT.fillSelect($('#qxTreated'), rest, /treat|test|exposed|target|campaign/i); MT.fillSelect($('#qxUnit'), c, /unit|market|region|geo|dma|store|city|group/i); MT.fillSelect($('#qxVal'), c, /value|metric|revenue|sales|conv|leads|sessions/i);
+  qxUnits(); qxChecks(true);
+}
+function qxUnits() { if (!qxTab) return; const u = $('#qxUnit').value; const lv = Array.from(new Set(qxTab.rows.map(r => String(r[u]).trim()))); $('#qxTUnit').innerHTML = lv.map(l => `<option>${esc(l)}</option>`).join(''); const g = lv.find(l => /treat|test|exposed/i.test(l)); if (g) $('#qxTUnit').value = g; }
+function qxChecks(reset) {
+  if (!qxTab) return; const dc = $('#qxDate').value, t = $('#qxTreated').value, prevC = reset ? null : MT.checked($('#qxCtrls')), prevV = reset ? null : MT.checked($('#qxCovs')), rest = qxTab.cols.filter(x => x !== dc && x !== t);
+  const isCov = x => /covar|demand|promo|spend|index|price|weather|holiday|search_vol|competitor/i.test(x), isNumCol = x => qxTab.rows.slice(0, 30).every(r => isFinite(MT.num(r[x])));
+  const ok = rest.filter(isNumCol);
+  MT.fillChecks($('#qxCtrls'), ok, 'qc', x => prevC ? prevC.includes(x) : !isCov(x)); MT.fillChecks($('#qxCovs'), ok, 'qv', x => prevV ? prevV.includes(x) : isCov(x));
+}
+['#qxCtrls', '#qxCovs'].forEach(id => $(id).addEventListener('change', e => { const other = id === '#qxCtrls' ? '#qxCovs' : '#qxCtrls'; if (e.target.checked) { const o = MT.$(`${other} input[value="${CSS.escape(e.target.value)}"]`); if (o) o.checked = false; } }));
+$('#qxDate').addEventListener('change', () => qxChecks(false)); $('#qxTreated').addEventListener('change', () => qxChecks(false)); $('#qxUnit').addEventListener('change', qxUnits);
+$('#qxFmt').addEventListener('change', () => { const l = $('#qxFmt').value === 'long'; $('#qxWide').hidden = l; $('#qxLong').hidden = !l; });
+MT.dropzone($('#qxDrop'), t => { $('#qxPaste').value = t; qxLoad(t); }); $('#qxPaste').addEventListener('input', MT.debounce(() => qxLoad($('#qxPaste').value), 250));
+function readQX(o) {
+  if (!qxTab) throw new Error('Paste or upload your CSV first.'); const long = $('#qxFmt').value === 'long', ev = $('#qxEvent').value; if (!ev) throw new Error('Enter the launch date.');
+  const b = E.buildQX(qxTab, { format: long ? 'long' : 'wide', date: $('#qxDate').value, treated: $('#qxTreated').value, controls: long ? null : MT.checked($('#qxCtrls')), covs: long ? [] : MT.checked($('#qxCovs')), unit: $('#qxUnit').value, value: $('#qxVal').value, treatedUnit: $('#qxTUnit').value, eventMs: MT.parseDate(ev) });
+  const s = $('#qxSeason').value; o.season = s === 'auto' ? (b.D.donors.length === 0 && !b.D.covs.length ? b.seasonGuess : 0) : +s; o.force = $('#qxForce').value; o.cross = $('#qxCross').checked; o.draws = +$('#qxDraws').value; o.seasonAuto = s === 'auto'; return b;
+}
+
+/* ---------- samples ---------- */
+const load = { ab2: () => { setMode('ab'); $('#abMetric').value = 'binary'; $('#abFmt').value = 'table'; $('#abFmt').dispatchEvent(new Event('change')); abRows = [{ name: 'Control', n: 10000, x: 520 }, { name: 'New landing page', n: 10000, x: 590 }]; renderAb(); },
+  abn: () => { load.ab2(); abRows = [{ name: 'Control', n: 10000, x: 520 }, { name: 'Variant B', n: 10000, x: 530 }, { name: 'Variant C', n: 9900, x: 615 }, { name: 'Variant D', n: 10100, x: 470 }]; renderAb(); },
+  abcont: () => { setMode('ab'); $('#abMetric').value = 'continuous'; $('#abFmt').value = 'raw'; $('#abFmt').dispatchEvent(new Event('change')); const t = MT.samples.abRawContinuous(); $('#abPaste').value = t; abLoad(t); renderAb(); },
+  mvb: () => { setMode('mv'); $('#mvMetric').value = 'binary'; $('#mvLayout').value = 'agg'; const t = MT.samples.mvBinary(); $('#mvPaste').value = t; mvLoad(t); $('#mvOut').value = 'conversions'; $('#mvN').value = 'visitors'; mvLayout(); },
+  mvc: () => { setMode('mv'); $('#mvMetric').value = 'continuous'; $('#mvLayout').value = 'raw'; const t = MT.samples.mvContinuous(); $('#mvPaste').value = t; mvLoad(t); $('#mvOut').value = 'revenue'; mvLayout(); },
+  geo: () => qxSample(MT.samples.geo({})), geocov: () => qxSample(MT.samples.geo({ cov: true, seed: 8 })), one: () => qxSample(MT.samples.oneControl({})), none: () => qxSample(MT.samples.noControl({})), short: () => qxSample(MT.samples.short({})) };
+function qxSample(s) { setMode('qx'); $('#qxFmt').value = 'wide'; $('#qxFmt').dispatchEvent(new Event('change')); $('#qxPaste').value = s.csv; qxLoad(s.csv); $('#qxDate').value = 'date'; $('#qxTreated').value = s.treatedCol; qxChecks(true); MT.$$('#qxCtrls input,#qxCovs input').forEach(i => i.checked = false); const cv = s.covs || []; MT.$$('#qxCtrls input').forEach(i => { if (!cv.includes(i.value)) i.checked = true; }); MT.$$('#qxCovs input').forEach(i => { if (cv.includes(i.value)) i.checked = true; }); $('#qxEvent').value = s.eventDate; }
+MT.$$('[data-s]').forEach(b => b.addEventListener('click', () => { load[b.dataset.s](); $('#results').innerHTML = ''; $('#err').textContent = ''; }));
+
+/* ---------- run ---------- */
+$('#run').addEventListener('click', async () => {
+  const btn = $('#run'), st = $('#status'); $('#err').textContent = ''; $('#results').innerHTML = ''; btn.disabled = true;
+  try {
+    const o = opts(); let res;
+    if (mode === 'ab') { const g = readAB(o); o.metric = $('#abMetric').value; res = E.analyzeAB(g, o); }
+    else if (mode === 'mv') { const cells = readMV(o); res = E.analyzeMV(cells, o); }
+    else { const b = readQX(o); st.textContent = 'Working...'; res = await E.analyzeQX(b.D, b.e, o, msg => st.textContent = msg + '...'); res.dataNotes = b.notes; res.opt = o; if (o.seasonAuto && o.season > 1 && b.D.donors.length === 0) res.notes.push(`Weekly-style seasonality (period ${o.season}) was inferred from the date spacing.`); (b.notes || []).forEach(n => res.notes.push(n)); }
+    res.o = o; lastRes = res; render(res, o); st.textContent = '';
+    $('#results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) { $('#err').textContent = e.message || String(e); console.error(e); st.textContent = ''; }
+  btn.disabled = false;
+});
+
+/* ---------- rendering ---------- */
+const kindOf = c => c === 'pos' ? 'pos' : c === 'neg' ? 'neg' : 'neu';
+const ebadge = (c, better) => { if (!c.sig) return MT.tag('No difference detected'); const good = (better === 'low' ? -c.est : c.est) > 0; return good ? MT.tag('Better', 'good') : MT.tag('Worse', 'bad'); };
+function render(res, o) {
+  const out = $('#results'); let h = '';
+  h += MT.verdict(kindOf(res.verdict.cls), res.verdict.title, esc(res.verdict.text));
+  if (res.verdict.caution) h += MT.note('<b>Caution.</b> ' + esc(res.verdict.caution), 'warn');
+  h += '<div class="card"><h3>How the model was chosen</h3><div class="path">' + res.path.map((p, i) => (i ? '<span class="arr" aria-hidden="true">\u2192</span>' : '') + `<span class="node${i === res.path.length - 1 ? ' pick' : ''}">${esc(p)}</span>`).join('') + '</div>' + (res.method ? `<p><b>Method:</b> ${esc(res.method)}</p>` : '') + '<ul style="padding-left:1.2rem;margin:.5rem 0 0;font-size:.85rem;color:var(--ink-secondary)">' + res.why.map(w => `<li style="margin-bottom:.3rem">${esc(w)}</li>`).join('') + '</ul></div>';
+  out.innerHTML = h; const sec = document.createElement('div'); out.appendChild(sec);
+  if (res.kind === 'ab') renderAB(res, o, sec); else if (res.kind === 'mv') renderMV(res, o, sec); else renderQX(res, o, sec);
+  const d = document.createElement('div'); d.className = 'card'; d.innerHTML = '<h3>Checks and diagnostics</h3><div style="margin-top:.5rem">' + res.diag.map(x => `<p style="margin:.35rem 0;font-size:.85rem">${MT.tag(x.s === 'ok' ? 'Pass' : x.s === 'warn' ? 'Check' : 'Problem', x.s === 'ok' ? 'good' : x.s === 'warn' ? 'warn' : 'bad')} ${esc(x.t)}</p>`).join('') + '</div>' + (res.notes.length ? '<ul style="padding-left:1.2rem;font-size:.82rem;color:var(--ink-secondary);margin-top:.75rem">' + res.notes.map(n => `<li>${esc(n)}</li>`).join('') + '</ul>' : '');
+  out.appendChild(d);
+  const ex = document.createElement('div'); ex.className = 'actions'; ex.innerHTML = '<button class="btn btn-secondary btn-sm" id="cpy" type="button">Copy summary</button><button class="btn btn-secondary btn-sm" id="dl" type="button">Download results (CSV)</button>'; out.appendChild(ex);
+  $('#cpy').addEventListener('click', e => MT.copy(summaryText(res, o), e.target)); $('#dl').addEventListener('click', () => MT.download('experiment-results.csv', resultsCSV(res), 'text/csv'));
+}
+const eff = (x, res) => E.fmtEff(x, res), relf = x => F.spct(x, 1);
+const ci = (c, res) => `[${eff(c.lo, res)}, ${eff(c.hi, res)}]`;
+function compTable(res, o) {
+  const rows = res.comps.map(c => [c.name, eff(c.est, res), ci(c, res), relf(c.rel), (c.pBound ? '<' + (Math.round(c.p * 1000) / 1000) : F.p(c.pAdj != null ? c.pAdj : c.p)), { h: ebadge(c, o.better) }]);
+  return MT.tbl(['Comparison', 'Effect', `${F.pct(1 - res.alpha, 0)} CI`, 'Relative', res.comps.length > 1 ? 'p (Holm-adjusted)' : 'p-value', 'Result'], rows, { num: [1, 3, 4] });
+}
+function renderAB(res, o, sec) {
+  const bin = res.metric === 'binary', c0 = res.groups[0]; let h = '';
+  if (res.comps.length === 1) { const c = res.comps[0]; h += MT.stats(bin ? [[c0.name + ' rate', F.pct(c.rateC, 2), F.int(c0.n) + ' visitors'], [res.groups[1].name + ' rate', F.pct(c.rateT, 2), F.int(res.groups[1].n) + ' visitors'], ['Absolute change', eff(c.est, res), ci(c, res)], ['Relative change', relf(c.rel), `[${relf(c.relLo)}, ${relf(c.relHi)}]`], ['p-value', F.p(c.p), res.method], ['Chance variant beats control', F.pct(c.bayes.pBeat, 1), 'Bayesian, flat prior']] : [[c0.name + ' mean', F.n(c.meanC, 2), 'n = ' + F.int(c0.n)], [res.groups[1].name + ' mean', F.n(c.meanT, 2), 'n = ' + F.int(res.groups[1].n)], ['Absolute change', eff(c.est, res), ci(c, res)], ['Relative change', relf(c.rel), `[${relf(c.relLo)}, ${relf(c.relHi)}]`], ['p-value', F.p(c.p), res.method]]); }
+  else { if (res.omnibus) h += MT.note(`<b>${esc(res.omnibus.name)}:</b> statistic ${F.n(res.omnibus.stat, 2)}, df ${res.omnibus.df}, p = ${F.p(res.omnibus.p)} (${esc(res.omnibus.effect)}).`); }
+  h += `<div class="card"><h3>Results</h3>${compTable(res, o)}<div id="chF"></div><div id="chB"></div></div>`; sec.innerHTML = h;
+  const rows = res.comps.map(c => ({ label: c.name, est: bin ? c.est * 100 : c.est, lo: bin ? c.lo * 100 : c.lo, hi: bin ? c.hi * 100 : c.hi, color: !c.sig ? 'var(--ink-muted)' : ((o.better === 'low' ? -c.est : c.est) > 0 ? 'var(--good-graphic)' : 'var(--critical)') }));
+  C.forest($('#chF'), { title: `Change vs control (${bin ? 'percentage points' : 'metric units'}, ${F.pct(1 - res.alpha, 0)} CI). Green = significantly better, red = significantly worse, gray = not significant.`, rows, fmt: v => F.n(v, 2), ref: 0 });
+  const zc = S.zCrit(res.alpha);
+  if (bin) C.bars($('#chB'), { title: 'Conversion rate by variant (error bars: ' + F.pct(1 - res.alpha, 0) + ' CI)', cats: res.groups.map(g => g.name), series: [{ name: 'Conversion rate', values: res.groups.map(g => g.x / g.n * 100), color: 'var(--series-1)' }], errors: res.groups.map(g => { const p = g.x / g.n, s = Math.sqrt(p * (1 - p) / g.n) * zc; return { lo: (p - s) * 100, hi: (p + s) * 100 }; }), yFmt: v => F.n(v, 2) + '%' });
+  else C.bars($('#chB'), { title: 'Mean by variant (error bars: ' + F.pct(1 - res.alpha, 0) + ' CI)', cats: res.groups.map(g => g.name), series: [{ name: 'Mean', values: res.groups.map(g => g.mean), color: 'var(--series-1)' }], errors: res.groups.map(g => { const s = S.tCrit(res.alpha, Math.max(1, g.n - 1)) * g.sd / Math.sqrt(g.n); return { lo: g.mean - s, hi: g.mean + s }; }), yFmt: v => F.n(v, 2) });
+  if (res.comps[0].robust) { const r = res.comps[0].robust; sec.insertAdjacentHTML('beforeend', MT.note(`<b>Robustness:</b> Welch p = ${F.p(r.welchP)}, Mann-Whitney p = ${F.p(r.mwP)}, bootstrap CI for the mean difference [${F.n(r.bootLo, 2)}, ${F.n(r.bootHi, 2)}].`)); }
+  if (res.power && isFinite(res.power.mdeRel)) sec.insertAdjacentHTML('beforeend', MT.note(`<b>Sensitivity:</b> with these sample sizes the test has 80% power to detect a relative change of about ${F.pct(res.power.mdeRel, 1)}.`));
+}
+function renderMV(res, o, sec) {
+  let h = '<div class="card"><h3>Effect of each element level vs its baseline</h3><p class="sub">Average marginal effects: the change in the metric when only that element switches from baseline, averaged over the traffic mix of all other elements.</p>' + compTable(res, o) + '<div id="chF"></div></div>';
+  h += '<div class="card"><h3>Does each element matter?</h3>' + MT.tbl(['Element', 'Tested', 'Joint test statistic', 'df', 'p-value'], res.factorTests.map(f => [f.factor, f.scope, F.n(f.w, 2), f.df, F.p(f.p)]), { num: [2, 3, 4] }) + (res.interTests.length ? '<h3 style="margin-top:1rem">Interactions</h3>' + MT.tbl(['Pair', 'df', 'p-value', 'Result'], res.interTests.map(t => [t.pair, t.df, F.p(t.p), { h: t.sig ? MT.tag('Interaction', 'warn') : MT.tag('None detected') }]), { num: [1, 2] }) : '') + '</div>';
+  const bin = res.metric === 'binary', ordered = res.cellRows.slice().sort((a, b) => (o.better === 'low' ? a.val - b.val : b.val - a.val));
+  h += '<div class="card"><h3>Every combination</h3><div id="chC"></div>' + MT.tbl(['Combination', 'Visitors', bin ? 'Conversion rate' : 'Mean', 'Change vs control cell', 'Relative', 'p (Holm)'], ordered.map(r => [r.label + (r.isCtrl ? ' (control)' : ''), F.int(r.n), bin ? F.pct(r.val, 2) : F.n(r.val, 2), r.isCtrl || r.est == null ? '\u2014' : eff(r.est, res), r.isCtrl || r.rel == null ? '\u2014' : relf(r.rel), r.isCtrl || r.pAdj == null ? '\u2014' : { h: F.p(r.pAdj) + (r.sig ? ' ' + MT.tag('sig', 'good') : '') }]), { num: [1, 2, 3, 4, 5] }) + '<p class="hint muted" style="font-size:.78rem">Model-recommended combination (best significant level of each element): <b>' + res.factors.map(f => `${esc(f)} = ${esc(res.recommended[f])}`).join(', ') + '</b>' + (res.recommendedObserved ? `. Observed in ${F.int(res.recommendedObserved.n)} visitors at ${bin ? F.pct(res.recommendedObserved.val, 2) : F.n(res.recommendedObserved.val, 2)}` : '') + `. Model prediction: ${bin ? F.pct(res.recommendedPred, 2) : F.n(res.recommendedPred, 2)}.</p></div>`;
+  h += '<div class="card"><details><summary>Model coefficients</summary>' + MT.tbl(['Term', bin ? 'Log-odds' : 'Coefficient', 'Std. error', 'p-value'], res.coefs.map(c => [c.term, F.n(c.est, 4), F.n(c.se, 4), F.p(c.p)]), { num: [1, 2, 3] }) + '</details></div>';
+  sec.innerHTML = h;
+  C.forest($('#chF'), { title: `Average marginal effect (${bin ? 'percentage points' : 'metric units'}, ${F.pct(1 - res.alpha, 0)} CI, unadjusted)`, rows: res.comps.map(c => ({ label: c.name, est: bin ? c.est * 100 : c.est, lo: bin ? c.lo * 100 : c.lo, hi: bin ? c.hi * 100 : c.hi, color: !c.sig ? 'var(--ink-muted)' : ((o.better === 'low' ? -c.est : c.est) > 0 ? 'var(--good-graphic)' : 'var(--critical)') })), fmt: v => F.n(v, 2), ref: 0 });
+  C.hbars($('#chC'), { title: (bin ? 'Conversion rate' : 'Mean') + ' by combination', cats: ordered.map(r => r.label), values: ordered.map(r => bin ? r.val * 100 : r.val), fmt: v => bin ? F.n(v, 2) + '%' : F.n(v, 2), colors: ordered.map(r => r.isCtrl ? 'var(--ink-muted)' : r.sig ? 'var(--series-3)' : 'var(--series-1)') });
+}
+function renderQX(res, o, sec) {
+  const m = res.main, T = res.D.y.length, e = res.e, xs = res.D.dates, cf = m.cf, y = res.D.y, nP = T - e, s = res.summary, P = res.primary;
+  let h = MT.stats([['Average effect per period', eff(P.est, res), isFinite(P.lo) ? `[${eff(P.lo, res)}, ${eff(P.hi, res)}]` : 'interval from placebo/BSTS below'], ['Relative effect', relf(P.rel), 'vs expected without campaign'], ['Cumulative effect', eff(s.cum, res), isFinite(s.cumLo) ? `[${eff(s.cumLo, res)}, ${eff(s.cumHi, res)}] over ${nP} periods` : `over ${nP} periods`], ['p-value', (P.pBound ? '<' + (Math.round(P.p * 1000) / 1000) : F.p(P.p)), P.from]]);
+  h += '<div class="card"><h3>Actual vs expected without the campaign</h3><div id="chA"></div><div id="chE"></div></div><div id="qxExtra"></div>'; sec.innerHTML = h;
+  C.line($('#chA'), { title: 'Treated series and counterfactual (shaded: ' + F.pct(1 - res.alpha, 0) + ' interval where available)', xs, xFmt: F.date, series: [{ name: 'Actual', values: y, color: 'var(--series-1)' }, { name: 'Expected without campaign', values: cf, color: 'var(--series-2)', dash: '5 4', band: { lo: m.cfLo, hi: m.cfHi } }], vlines: [{ x: xs[e], label: 'Launch' }], height: 300 });
+  const gap = y.map((v, i) => v - cf[i]);
+  C.line($('#chE'), { title: 'Effect per period (actual minus expected). Before launch this shows how well the model fits.', xs, xFmt: F.date, series: [{ name: 'Effect', values: gap, color: 'var(--series-1)', band: { lo: y.map((v, i) => isFinite(m.cfHi[i]) ? v - m.cfHi[i] : NaN), hi: y.map((v, i) => isFinite(m.cfLo[i]) ? v - m.cfLo[i] : NaN) } }, { name: 'No effect', values: y.map(() => 0), color: 'var(--ink-muted)', dash: '3 3', width: 1.2 }], vlines: [{ x: xs[e], label: 'Launch' }], zero: true, height: 220, table: false });
+  const ex = $('#qxExtra'); let x = '';
+  if (res.modelKey === 'ITS' || res.modelKey === 'ITS_CTRL') { const q = m.extra; x += '<div class="card"><h3>Segmented regression terms</h3>' + MT.tbl(['Term', 'Estimate', 'Std. error (Newey-West)', 'p-value'], [['Pre-launch slope (per period)', F.n(q.slopePre.est, 3), F.n(q.slopePre.se, 3), F.p(q.slopePre.p)], ['Immediate level change at launch', F.n(q.level.est, 2), F.n(q.level.se, 2), F.p(q.level.p)], ['Change in slope after launch (per period)', F.n(q.slopeChange.est, 3), F.n(q.slopeChange.se, 3), F.p(q.slopeChange.p)]], { num: [1, 2, 3] }) + `<p class="hint muted" style="font-size:.78rem">R\u00B2 = ${q.r2.toFixed(3)}, ${q.k} parameters${q.controls ? `, ${q.controls} control regressor${q.controls > 1 ? 's' : ''}` : ''}${q.season > 1 ? `, seasonal dummies (period ${q.season})` : ''}.</p></div>`; }
+  if (res.modelKey === 'DiD' || res.modelKey === 'DiD_AVG') { const t = m.extra.table; x += '<div class="card"><h3>Difference-in-differences table</h3>' + MT.tbl(['', 'Before launch', 'After launch', 'Change'], [['Treated', F.n(t.treatPre, 1), F.n(t.treatPost, 1), F.n(t.treatPost - t.treatPre, 1)], ['Control', F.n(t.ctrlPre, 1), F.n(t.ctrlPost, 1), F.n(t.ctrlPost - t.ctrlPre, 1)], [{ h: '<b>Difference in differences</b>' }, '', '', { h: '<b>' + F.n(m.avg, 1) + '</b>' }]], { num: [1, 2, 3] }) + '</div>'; }
+  if (res.modelKey === 'PrePost') { const q = m.extra; x += '<div class="card"><h3>Pre/post tests</h3>' + MT.tbl(['Test', 'Statistic', 'p-value'], [[`Wilcoxon signed-rank (${q.window} matched pairs)`, 'W+ = ' + F.n(q.wilcoxon.W, 1), F.p(q.wilcoxon.p)], [`Paired t-test`, 't = ' + F.n(q.pairedT.t, 2), F.p(q.pairedT.p)], ['Mann-Whitney (full windows)', 'z = ' + F.n(q.mannWhitney.z, 2), F.p(q.mannWhitney.p)]], { num: [1, 2] }) + '</div>'; }
+  if (res.modelKey === 'SCM') { const q = m.extra; x += '<div class="card"><h3>Synthetic control weights</h3><div id="chW"></div><p class="hint muted" style="font-size:.78rem">Pre-launch fit R\u00B2 ' + q.r2.toFixed(3) + ', RMSPE ' + F.n(q.preRmspe, 2) + '. Weight stability across pre-period halves: ' + q.stability.toFixed(2) + '. The shaded band is an approximate \u00B11.96 pre-period RMSPE, not a formal interval.</p></div>'; if (q.placebo) x += '<div class="card"><h3>In-space placebo test</h3><div id="chP"></div><p class="hint muted" style="font-size:.78rem">Each untreated donor was treated as if it had launched. The orange line is the real treated series. p = ' + F.p(q.placebo.p) + ' (rank ' + q.placebo.rank + ' of ' + (q.placebo.n + 1) + ').</p></div>'; }
+  const bs = res.modelKey === 'BSTS' ? m : res.inference; if (bs) { x += '<div class="card"><h3>Which controls drive the counterfactual (BSTS)</h3><div id="chI"></div><p class="hint muted" style="font-size:.78rem">Posterior inclusion probability from spike-and-slab selection. ' + bs.extra.draws + ' Gibbs draws, local level prior sd ' + bs.extra.levelSd + '.</p></div>'; }
+  if (res.alt) { const a = res.alt.r; x += '<div class="card"><h3>Cross-check: ' + esc(res.alt.name) + '</h3>' + MT.tbl(['Model', 'Avg effect', 'Relative', 'Interval', 'p'], [[res.method, eff(m.avg, res), relf(m.rel), isFinite(m.avgLo) ? `[${eff(m.avgLo, res)}, ${eff(m.avgHi, res)}]` : 'n/a', isFinite(m.p) ? F.p(m.p) : 'n/a'], [res.alt.name, eff(a.avg, res), relf(a.rel), isFinite(a.avgLo) ? `[${eff(a.avgLo, res)}, ${eff(a.avgHi, res)}]` : 'n/a', isFinite(a.p) ? F.p(a.p) : 'n/a']], { num: [1, 2, 4] }) + '</div>'; }
+  ex.innerHTML = x;
+  if (res.modelKey === 'SCM') { const q = m.extra; C.hbars($('#chW'), { cats: q.weights.filter(w => w.w > 0.005).slice(0, 12).map(w => w.name), values: q.weights.filter(w => w.w > 0.005).slice(0, 12).map(w => w.w * 100), fmt: v => F.n(v, 1) + '%' }); if (q.placebo && $('#chP')) C.hist($('#chP'), { title: 'Post/pre RMSPE ratio: untreated donors (bars) vs treated (line)', values: q.placebo.ratios, marker: q.ratio, markerLabel: 'Treated', xFmt: v => F.n(v, 1) }); }
+  if (bs && $('#chI')) C.hbars($('#chI'), { cats: bs.extra.inclusion.slice(0, 10).map(i => i.name), values: bs.extra.inclusion.slice(0, 10).map(i => i.prob * 100), fmt: v => F.n(v, 0) + '%' });
+}
+
+/* ---------- export ---------- */
+function summaryText(res, o) {
+  const L = []; L.push('EXPERIMENT RESULT'); L.push(res.verdict.title); L.push(res.verdict.text); if (res.verdict.caution) L.push('Caution: ' + res.verdict.caution); L.push(''); L.push('Method: ' + (res.method || '')); L.push('Selection path: ' + res.path.join(' > ')); L.push('Significance level: ' + res.alpha);
+  res.comps.forEach(c => L.push(`- ${c.name}: effect ${eff(c.est, res)} [${eff(c.lo, res)}, ${eff(c.hi, res)}], relative ${relf(c.rel)}, p ${c.pBound ? '< ' + (Math.round(c.p * 1000) / 1000) : '= ' + F.p(c.pAdj != null ? c.pAdj : c.p)}`));
+  if (res.summary) L.push(`Cumulative effect over ${res.summary.nPost} periods: ${eff(res.summary.cum, res)}`); L.push(''); L.push('Checks:'); res.diag.forEach(d => L.push(` [${d.s}] ${d.t}`)); return L.join('\n');
+}
+function resultsCSV(res) { const rows = [['comparison', 'effect', 'ci_low', 'ci_high', 'relative_effect', 'p_raw', 'p_adjusted', 'significant']]; res.comps.forEach(c => rows.push([c.name, c.est, c.lo, c.hi, c.rel, c.p, c.pAdj, c.sig])); if (res.kind === 'qx') { rows.push([]); rows.push(['date', 'actual', 'expected_without_campaign', 'effect']); res.D.dates.forEach((d, i) => rows.push([F.date(d), res.D.y[i], res.main.cf[i], res.D.y[i] - res.main.cf[i]])); } return MT.toCSV(rows); }
+
+/* ---------- init ---------- */
+load.ab2(); setMode('ab');
+})();
+</script>

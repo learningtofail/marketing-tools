@@ -1,0 +1,14 @@
+[
+ {"tool": "bot-traffic-screener", "file": "01-happy-publisher-ga-export-with-bot-segments.csv",
+  "must": ["83.1% human traffic, 12.0% bots, 4.9% suspect", "amazonaws.com", "headlesschrome", "python-requests", "GA4 has no network, ISP or user agent dimension"],
+  "mustnot": ["ghost spam", "Hostname does not equal your domain", "Segments to exclude"]},
+ {"tool": "bot-traffic-screener", "file": "02-messy-clinic-booking-log-fr-headers.csv",
+  "must": ["15 rows repeat a session ID", "search and social crawlers", "Conversion rate would move from 5.42% to 6.49%", "no user agent and no network", "verify a crawler by reverse DNS"],
+  "mustnot": ["0.00% to 0.00%", "100% of sessions"]},
+ {"tool": "bot-traffic-screener", "file": "03-trap-nonprofit-giving-day-false-positives.csv",
+  "must": ["96.0% human traffic, 4.0% bots, 0.0% suspect", "Do not exclude those networks", "recorded duration of exactly 0", "amazonaws.com"],
+  "mustnot": ["inflated by", "microsoft corp", "oracle corporation", "akamai technologies", "cloudflare, inc.", "cogent communications", "facebook-app-feed"]},
+ {"tool": "bot-traffic-screener", "file": "04-trap-b2b-saas-awareness-zero-conv.csv",
+  "must": ["100.0% human traffic, 0.0% bots, 0.0% suspect", "No segment stands out", "does not convert (awareness channels"],
+  "mustnot": ["podcast_sponsor", "g2_reviews_referral", "Segments to exclude"]}
+]

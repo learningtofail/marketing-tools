@@ -1,9 +1,9 @@
-<!--META {"title":"Paid Search Seasonality Demand Curve Visualizer","short":"Decompose search demand into trend and seasonal indices, and get bid and budget multipliers by month and weekday.","desc":"Upload daily or monthly search volume, clicks or conversions. The tool runs a multiplicative decomposition, plots the seasonal curve, and converts the indices into dampened bid and budget multipliers.","tag":"Paid search"} -->
+<!--META {"title":"Paid Search Seasonality Demand Curve Visualizer","short":"Decompose search demand into trend and seasonal indices, and get starting-point bid adjustments by month and weekday.","desc":"Upload daily or monthly search volume, clicks or conversions. The tool runs a multiplicative decomposition, tests whether the seasonal pattern is real, plots the curve, and shows starting-point bid adjustments.","tag":"Paid search"} -->
 <div class="card"><h3>Demand history</h3>
-  <p class="sub">Daily or monthly rows with a date and a value (search volume, clicks, conversions or revenue). Two or more years give reliable monthly indices. Daily data adds weekday indices.</p>
+  <p class="sub">Daily or monthly rows with a date and a value (search volume, clicks, conversions or revenue). Three or more years are needed for a tested result; under two years the tool will not draw a seasonal curve. Use one region and one language per file. Daily data adds weekday indices.</p>
   <div id="drop"></div>
   <div class="field" style="margin-top:.6rem"><label for="paste">Or paste CSV</label><textarea id="paste" placeholder="date,value"></textarea></div>
-  <div class="row3"><div class="field"><label for="cd">Date</label><select id="cd"></select></div><div class="field"><label for="cv">Value</label><select id="cv"></select></div><div class="field"><label for="damp">Bid response strength</label><select id="damp"><option value="0.5">Cautious (50% of index)</option><option value="0.75" selected>Balanced (75%)</option><option value="1">Full (100%)</option></select></div></div>
+  <div class="row3"><div class="field"><label for="cd">Date</label><select id="cd"></select></div><div class="field"><label for="cv">Value</label><select id="cv"></select></div><div class="field"><label for="dfm">Date format</label><select id="dfm"><option value="auto" selected>Detect (day/month or month/day)</option><option value="dmy">Day first (31/01/2025)</option><option value="mdy">Month first (01/31/2025)</option></select></div><div class="field"><label for="damp">Bid response strength</label><select id="damp"><option value="0.5">Cautious (50% of index)</option><option value="0.75" selected>Balanced (75%)</option><option value="1">Full (100%)</option></select></div></div>
   <div class="actions"><button class="btn btn-primary" id="go" type="button">Decompose</button><button class="btn btn-secondary btn-sm" id="smp" type="button">Load sample</button></div><div class="err" id="err"></div>
 </div>
 <div id="out"></div>
@@ -11,44 +11,134 @@
 (function () {
 const $ = MT.$, F = MT.fmt, S = MT.stat, C = MT.chart; let tab = null;
 const MN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], DN = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-function load(t) { tab = MT.readTable(t, /date|day|month/i); MT.fillSelect($('#cd'), tab.cols, /date|day|month/i); MT.fillSelect($('#cv'), tab.cols, /value|volume|clicks|conv|revenue|sessions/i); }
+const MON = { jan: 0, janv: 0, january: 0, janvier: 0, enero: 0, januar: 0, feb: 1, fev: 1, fevr: 1, febr: 1, february: 1, fevrier: 1, febrero: 1, februar: 1, mar: 2, mars: 2, march: 2, marzo: 2, marz: 2, maerz: 2, apr: 3, avr: 3, april: 3, avril: 3, abr: 3, abril: 3, may: 4, mai: 4, mayo: 4, jun: 5, juin: 5, june: 5, junio: 5, juni: 5, jul: 6, juil: 6, july: 6, juillet: 6, julio: 6, juli: 6, aug: 7, aout: 7, august: 7, ago: 7, agosto: 7, sep: 8, sept: 8, september: 8, septembre: 8, septiembre: 8, oct: 9, october: 9, octobre: 9, octubre: 9, okt: 9, oktober: 9, nov: 10, november: 10, novembre: 10, noviembre: 10, dec: 11, december: 11, decembre: 11, dez: 11, dezember: 11, dic: 11, diciembre: 11 };
+const mi = w => { const k = w.toLowerCase().normalize('NFD').replace(/[̀-ͯ.]/g, ''); return k in MON ? MON[k] : -1; };
+const W = '([A-Za-zÀ-ÿ.]+)';
+/* Strict date parser: unknown month words and impossible days give NaN instead of a silent guess. */
+function parseD(s, order) {
+  s = String(s == null ? '' : s).trim(); if (!s) return NaN; let m, y, mo, d;
+  if (/^\d{4}-\d{1,2}-\d{1,2}[T ]/.test(s)) return MT.parseDate(s);
+  if (/[A-Za-zÀ-ÿ]/.test(s)) {
+    if ((m = s.match(new RegExp('^(\\d{1,2})\\s+' + W + '\\s+(\\d{4})$')))) { d = +m[1]; mo = mi(m[2]); y = +m[3]; }
+    else if ((m = s.match(new RegExp('^' + W + '\\s+(\\d{1,2}),?\\s+(\\d{4})$')))) { mo = mi(m[1]); d = +m[2]; y = +m[3]; }
+    else if ((m = s.match(new RegExp('^' + W + '[\\s,.-]+(\\d{4})$')))) { mo = mi(m[1]); d = 1; y = +m[2]; }
+    else if ((m = s.match(new RegExp('^(\\d{4})\\s+' + W + '$')))) { y = +m[1]; mo = mi(m[2]); d = 1; }
+    else return NaN;
+    if (mo < 0 || d < 1 || d > 31) return NaN; const t = Date.UTC(y, mo, d); return new Date(t).getUTCMonth() === mo ? t : NaN;
+  }
+  if (!/[-\/.]/.test(s) && !/^\d{8}$/.test(s)) return NaN;
+  const t = MT.parseDate(s, order); return isFinite(t) ? t : NaN;
+}
+const looksDate = v => /\d{4}-\d|\d[\/.]\d|[A-Za-zÀ-ÿ]{3}/.test(v) && isFinite(parseD(v));
+function isDateCol(rows, c) { const v = rows.map(r => String(r[c]).trim()).filter(x => x !== ''); return v.length > 0 && v.filter(looksDate).length >= v.length * 0.8; }
+function isNumCol(rows, c) { const v = rows.map(r => String(r[c]).trim()).filter(x => x !== ''); return v.length > 0 && v.filter(x => isFinite(MT.num(x))).length >= v.length * 0.8; }
+function load(t) {
+  tab = MT.readTable(t, /date|day|month|mois|jour|time|period|week/i);
+  const c = tab.cols; MT.fillSelect($('#cd'), c, /date|day|month|mois|jour|time|period|week|semaine/i, { choose: true });
+  if (!$('#cd').value) { const g = c.find(x => isDateCol(tab.rows, x)); if (g) $('#cd').value = g; }
+  const rest = c.filter(x => x !== $('#cd').value);
+  MT.fillSelect($('#cv'), c, null, { choose: true });
+  const g = MT.guess(rest, /value|volume|clicks|conv|revenue|sessions|search|recherche|signups|bookings|leads|pageviews|orders|visits|views|count/i) || rest.find(x => isNumCol(tab.rows, x) && !isDateCol(tab.rows, x));
+  if (g) $('#cv').value = g;
+}
 MT.dropzone($('#drop'), t => { $('#paste').value = t; load(t); }); $('#paste').addEventListener('input', MT.debounce(() => load($('#paste').value), 250));
 $('#smp').addEventListener('click', () => { const r = MT.rng(21), rows = [['date', 'value']], seas = [0.9, 0.85, 0.95, 1.0, 1.05, 0.95, 0.85, 0.9, 1.0, 1.1, 1.35, 1.25], dow = [1.05, 1.08, 1.06, 1.02, 0.95, 0.85, 0.9]; for (let d = 0; d < 1096; d++) { const dt = new Date(Date.UTC(2023, 0, 1 + d)), m = dt.getUTCMonth(), w = (dt.getUTCDay() + 6) % 7, tr = 1000 * (1 + 0.0004 * d); rows.push([F.date(+dt), Math.round(tr * seas[m] * dow[w] * (0.94 + 0.12 * r.u()))]); } const t = MT.toCSV(rows); $('#paste').value = t; load(t); run(); });
+const lab = k => Math.floor(k / 12) + '-' + String(k % 12 + 1).padStart(2, '0');
+const dim = k => new Date(Date.UTC(Math.floor(k / 12), k % 12 + 1, 0)).getUTCDate();
+const notesBlock = notes => notes.length ? MT.note('<b>Data notes</b><ul>' + notes.map(t => '<li>' + MT.esc(t) + '</li>').join('') + '</ul>', 'warn') : '';
 function run() {
   $('#err').textContent = ''; if (!tab) { $('#err').textContent = 'Paste or upload data first.'; return; }
-  const pts = tab.rows.map(r => ({ d: MT.parseDate(r[$('#cd').value]), v: MT.num(r[$('#cv').value]) })).filter(p => isFinite(p.d) && isFinite(p.v)).sort((a, b) => a.d - b.d);
-  if (pts.length < 12) { $('#err').textContent = 'Need at least 12 rows.'; return; }
-  const gaps = []; for (let i = 1; i < pts.length; i++) gaps.push((pts[i].d - pts[i - 1].d) / 864e5); const medGap = S.median(gaps), daily = medGap <= 1.5, damp = +$('#damp').value;
-  // monthly totals (mean per day for daily data to control month length)
-  const mm = new Map(); pts.forEach(p => { const dt = new Date(p.d), k = dt.getUTCFullYear() * 12 + dt.getUTCMonth(); const o = mm.get(k) || { s: 0, n: 0 }; o.s += p.v; o.n++; mm.set(k, o); });
-  const keys = Array.from(mm.keys()).sort((a, b) => a - b), mv = keys.map(k => daily ? mm.get(k).s / mm.get(k).n : mm.get(k).s / mm.get(k).n), months = keys.length;
-  if (months < 12) { $('#err').textContent = `Only ${months} months of data. Need at least 12 for a seasonal curve.`; return; }
-  // centered 2x12 MA
-  const ma = mv.map((_, i) => { if (i < 6 || i > months - 7) return NaN; let s = 0; for (let j = -5; j <= 5; j++) s += mv[i + j]; s += 0.5 * mv[i - 6] + 0.5 * mv[i + 6]; return s / 12; });
-  const ratio = Array.from({ length: 12 }, () => []); mv.forEach((v, i) => { if (isFinite(ma[i])) ratio[keys[i] % 12].push(v / ma[i]); });
-  let usedMA = ratio.every(a => a.length >= 1), idx;
-  if (usedMA) idx = ratio.map(a => S.mean(a)); else { const avg = S.mean(mv), by = Array.from({ length: 12 }, () => []); mv.forEach((v, i) => by[keys[i] % 12].push(v / avg)); idx = by.map(a => a.length ? S.mean(a) : 1); }
-  const norm = S.mean(idx); idx = idx.map(x => x / norm);
-  const cnt = ratio.map(a => a.length), yrs = months / 12, weak = usedMA ? yrs < 2 : true;
-  // dow
-  let dIdx = null; if (daily && pts.length >= 56) { const by = Array.from({ length: 7 }, () => []); const dv = pts.map(p => p.v), m7 = dv.map((_, i) => i < 3 || i > dv.length - 4 ? NaN : S.mean(dv.slice(i - 3, i + 4))); pts.forEach((p, i) => { if (isFinite(m7[i]) && m7[i] > 0) by[(new Date(p.d).getUTCDay() + 6) % 7].push(p.v / m7[i]); }); dIdx = by.map(a => a.length ? S.mean(a) : 1); const n7 = S.mean(dIdx); dIdx = dIdx.map(x => x / n7); }
-  const deseason = mv.map((v, i) => v / idx[keys[i] % 12]), fit = S.ols(deseason.map((_, i) => [1, i]), deseason), trendPerYr = fit.beta[1] * 12 / Math.max(S.mean(deseason), 1e-9);
-  const seasVar = S.variance(mv.map((v, i) => Math.log(v))) > 0 ? 1 - S.variance(mv.map((v, i) => Math.log(v / idx[keys[i] % 12]))) / S.variance(mv.map(v => Math.log(v))) : 0;
-  const peak = idx.indexOf(Math.max(...idx)), trough = idx.indexOf(Math.min(...idx)), mult = x => 1 + (x - 1) * damp;
-  let h = MT.verdict('info', `Peak demand in ${MN[peak]} at ${(idx[peak] * 100).toFixed(0)}% of average, trough in ${MN[trough]} at ${(idx[trough] * 100).toFixed(0)}%`, `The seasonal swing from trough to peak is ${F.pct(idx[peak] / idx[trough] - 1, 0)}. Seasonality explains about ${F.pct(Math.max(0, seasVar), 0)} of month-to-month variation, and the underlying trend runs ${F.spct(trendPerYr, 1)} per year.`);
-  h += MT.stats([['Months of history', String(months), yrs.toFixed(1) + ' years'], ['Granularity', daily ? 'Daily' : 'Monthly', daily ? 'weekday indices included' : 'no weekday view'], ['Peak month', MN[peak], (idx[peak] * 100).toFixed(0) + ' index'], ['Trough month', MN[trough], (idx[trough] * 100).toFixed(0) + ' index'], ['Annual trend', F.spct(trendPerYr, 1), 'de-seasonalized']]);
-  if (weak) h += MT.note('<b>Short history.</b> With under two full years each month index rests on a single observation and mixes seasonality with trend. Treat the multipliers as a starting point.');
+  const cdn = $('#cd').value, cvn = $('#cv').value, damp = +$('#damp').value, notes = [];
+  if (!cdn || !cvn) { $('#err').textContent = 'Choose the date column and the value column.'; return; }
+  if (cdn === cvn) { $('#err').textContent = 'The date and value columns must be different.'; return; }
+  const raw = tab.rows.map(r => String(r[cdn]).trim()).filter(x => x !== ''), fmtSel = $('#dfm').value, hasTime = raw.some(x => /\d[T ]\d{1,2}:\d{2}/.test(x));
+  // readTable already rewrote ambiguous dd/mm vs mm/dd columns as month-first ISO dates; a swap of month and day undoes that.
+  const amb = MT.dq.items.some(i => i.kind === 'dates' && i.text.indexOf('"' + cdn + '"') >= 0 && i.text.indexOf('ambiguous') >= 0);
+  const swap = x => x.replace(/^(\d{4})-(\d{2})-(\d{2})$/, (_, y, m, d) => y + '-' + d + '-' + m), pd = (x, o) => parseD(amb && o === 'dmy' ? swap(x) : x);
+  let order = 'mdy';
+  if (amb) {
+    const cnt = o => new Set(raw.map(x => pd(x, o)).filter(isFinite).map(t => { const d = new Date(t); return d.getUTCFullYear() * 12 + d.getUTCMonth(); })).size;
+    const a = cnt('dmy'), b = cnt('mdy'); order = fmtSel === 'auto' ? (a > b ? 'dmy' : 'mdy') : fmtSel;
+    notes.push(`Dates like 01/02/2022 can be read two ways. Read as ${order === 'dmy' ? 'day/month/year' : 'month/day/year'}${fmtSel === 'auto' && a !== b ? ', because that gives a regular series (' + Math.max(a, b) + ' months against ' + Math.min(a, b) + ')' : ''}. Change the Date format box if that is wrong.`);
+  }
+  const fmtN = MT.numFmt(tab.rows.map(r => r[cvn])), byDay = new Map(), badD = [], badV = []; let dupRows = 0;
+  tab.rows.forEach(r => {
+    const sd = String(r[cdn]).trim(), sv = r[cvn]; if (sd === '' && String(sv).trim() === '') return;
+    const d = pd(sd, order), v = MT.num(sv, fmtN);
+    if (!isFinite(d)) { badD.push(sd || '(blank)'); return; } if (!isFinite(v)) { badV.push(sd); return; }
+    const o = byDay.get(d) || { s: 0, n: 0 }; o.s += v; o.n++; byDay.set(d, o); if (o.n > 1) dupRows++;
+  });
+  if (badD.length) notes.push(`${badD.length} row${badD.length === 1 ? '' : 's'} left out because the date was not recognised (e.g. ${badD.slice(0, 3).join(' | ')}). Check the Date format box.`);
+  if (badV.length) notes.push(`${badV.length} row${badV.length === 1 ? '' : 's'} left out because the value was not a number (dates e.g. ${badV.slice(0, 3).join(' | ')}).`);
+  const total = tab.rows.length;
+  if (!byDay.size || badD.length > total * 0.2) { $('#out').innerHTML = MT.notComputed('Not computed: dates not recognised', [`${badD.length} of ${total} rows have a date the tool cannot read.`, 'Use yyyy-mm-dd, dd/mm/yyyy or a month name such as janv. 2022, or set the Date format box.']) + notesBlock(notes); return; }
+  const pts = Array.from(byDay.entries()).sort((a, b) => a[0] - b[0]).map(([d, o]) => ({ d, v: o.s })), nDays = pts.length;
+  if (dupRows) {
+    const others = tab.cols.filter(c => c !== cdn && c !== cvn && !isNumCol(tab.rows, c) && new Set(tab.rows.map(r => r[c])).size > 1 && new Set(tab.rows.map(r => r[c])).size <= 12);
+    notes.push(hasTime ? `${tab.rows.length - nDays} timestamped rows were added together into ${nDays} days (hourly or sub-daily data). Days are cut at the date written in the file, so if it is UTC and your reporting time zone differs, day totals near midnight sit on the wrong day.` : `${dupRows} row${dupRows === 1 ? ' shares' : 's share'} a date with another row and ${dupRows === 1 ? 'was' : 'were'} added together.${others.length ? ' Your file has a "' + others[0] + '" column with several values. A curve over mixed regions, languages or products is wrong for each of them, so upload one at a time.' : ''}`);
+  }
+  const gaps = []; for (let i = 1; i < pts.length; i++) gaps.push((pts[i].d - pts[i - 1].d) / 864e5);
+  const medGap = gaps.length ? S.median(gaps) : 30, daily = medGap <= 1.5, monthlyGrain = medGap >= 25;
+  let dIdx = null;
+  if (daily && nDays >= 56) {
+    const dm = new Map(pts.map(q => [Math.round(q.d / 864e5), q.v])), by = Array.from({ length: 7 }, () => []);
+    pts.forEach(q => { const t = Math.round(q.d / 864e5); let s = 0, ok = true; for (let j = -3; j <= 3; j++) { const v = dm.get(t + j); if (v == null) { ok = false; break; } s += v; } if (ok && s > 0) by[(new Date(q.d).getUTCDay() + 6) % 7].push(q.v / (s / 7)); });
+    if (by.every(a => a.length >= 8)) { dIdx = by.map(a => S.mean(a)); const n7 = S.mean(dIdx); dIdx = dIdx.map(x => x / n7); }
+    const span2 = (pts[nDays - 1].d - pts[0].d) / 864e5 + 1, miss = Math.round(span2 - nDays); if (miss > span2 * 0.02) notes.push(`${miss} days are missing inside the date range. Weekday indices only use days with a full week of data around them.`);
+  }
+  const wkTable = () => dIdx ? '<div class="card"><h3>Weekday indices</h3>' + MT.tbl(['Day', 'Index', 'Starting bid adjustment'], dIdx.map((x, i) => [DN[i], (x * 100).toFixed(0), (1 + (x - 1) * damp).toFixed(2) + 'x']), { num: [1, 2] }) + '</div>' : '';
+  const mm = new Map(); pts.forEach(p => { const dt = new Date(p.d), k = dt.getUTCFullYear() * 12 + dt.getUTCMonth(), o = mm.get(k) || { s: 0, n: 0 }; o.s += p.v; o.n++; mm.set(k, o); });
+  const ks = Array.from(mm.keys()).sort((a, b) => a - b), k0 = ks[0], k1 = ks[ks.length - 1], span = k1 - k0 + 1, mv = new Array(span).fill(NaN), absent = [], zero = [], partial = [];
+  for (let i = 0; i < span; i++) {
+    const k = k0 + i, o = mm.get(k); if (!o) { absent.push(lab(k)); continue; }
+    const rate = monthlyGrain ? o.s / dim(k) : o.s / (o.n * (daily ? 1 : medGap)), cover = monthlyGrain ? 1 : o.n * (daily ? 1 : medGap) / dim(k);
+    if (cover < 0.5) { partial.push(lab(k)); continue; } if (!(rate > 0)) { zero.push(lab(k)); continue; } mv[i] = rate;
+  }
+  const lst = a => a.slice(0, 4).join(', ') + (a.length > 4 ? ' and ' + (a.length - 4) + ' more' : '');
+  if (absent.length) notes.push(`${absent.length} calendar month${absent.length === 1 ? ' has' : 's have'} no rows (${lst(absent)}). They are treated as gaps, not as zero.`);
+  if (zero.length) notes.push(`${zero.length} month${zero.length === 1 ? '' : 's'} had zero or negative volume (${lst(zero)}). Treated as gaps, since a zero usually means a paused campaign or a tracking outage.`);
+  if (partial.length) notes.push(`${partial.length} month${partial.length === 1 ? ' is' : 's are'} less than half covered by rows (${lst(partial)}) and left out.`);
+  if (monthlyGrain) notes.push('Monthly totals were divided by the days in each month, so February is not understated.');
+  const usable = mv.filter(isFinite).length, yrs = usable / 12;
+  if (usable < 24) { $('#out').innerHTML = MT.notComputed('Not enough history for a seasonal curve', [`Found ${usable} usable month${usable === 1 ? '' : 's'}. At least 24 are needed, and 36 or more for a tested result.`, 'With less history, a seasonal swing cannot be told apart from growth or a one-off spike, so no peak or trough is shown.']) + notesBlock(notes) + wkTable(); return; }
+  // Short internal gaps (up to 3 months) are bridged by straight-line interpolation for the trend line only; they never count as observations.
+  const mf = mv.slice(); let bridged = 0;
+  for (let i = 0; i < span; i++) if (!isFinite(mf[i])) { let j = i; while (j < span && !isFinite(mv[j])) j++; if (i > 0 && j < span && isFinite(mv[i - 1]) && j - i <= 3) { for (let q = i; q < j; q++) mf[q] = mv[i - 1] + (mv[j] - mv[i - 1]) * (q - i + 1) / (j - i + 1); bridged += j - i; } i = j; }
+  if (bridged) notes.push(bridged + ' missing month' + (bridged === 1 ? '' : 's') + ' bridged by a straight line between neighbours to draw the trend. They are not counted as observations.');
+  const ma = mf.map((_, i) => { if (i < 6 || i > span - 7) return NaN; let s = 0; for (let j = -5; j <= 5; j++) s += mf[i + j]; s += 0.5 * mf[i - 6] + 0.5 * mf[i + 6]; return s / 12; });
+  const ratio = Array.from({ length: 12 }, () => []); mv.forEach((v, i) => { if (isFinite(ma[i]) && isFinite(v)) ratio[(k0 + i) % 12].push(v / ma[i]); });
+  if (ratio.some(a => !a.length)) { $('#out').innerHTML = MT.notComputed('Not computed: gaps leave some calendar months with no comparison', ['The series needs a full run of 13 consecutive months around each month to remove the trend.', 'Fill the missing months or use a longer, gap-free history.']) + notesBlock(notes); return; }
+  let idx = ratio.map(a => S.mean(a)); const norm = S.mean(idx); idx = idx.map(x => x / norm);
+  const cnt = ratio.map(a => a.length), tested = cnt.every(n => n >= 2), N = S.sum(cnt);
+  let p = NaN, adjR2 = 0, lo = null, hi = null;
+  if (tested) {
+    const lr = ratio.map(a => a.map(Math.log)), all = [].concat(...lr), gm = S.mean(all), ssT = S.sum(all.map(x => (x - gm) ** 2)), ssW = S.sum(lr.map(a => { const m = S.mean(a); return S.sum(a.map(x => (x - m) ** 2)); })), ssB = ssT - ssW;
+    if (ssT > 1e-12 && ssW > 1e-15) { p = S.fSf((ssB / 11) / (ssW / (N - 12)), 11, N - 12); adjR2 = Math.max(0, 1 - (ssW / (N - 12)) / (ssT / (N - 1))); } else p = ssT <= 1e-12 ? 1 : 0;
+    const pooled = Math.sqrt(ssW / (N - 12)); lo = idx.map((x, i) => x * Math.exp(-2 * pooled / Math.sqrt(cnt[i]))); hi = idx.map((x, i) => x * Math.exp(2 * pooled / Math.sqrt(cnt[i])));
+  }
+  const sig = tested && p < 0.05, prov = !tested, showMult = sig || prov, mult = x => 1 + (x - 1) * damp;
+  const fin = mv.map((v, i) => isFinite(v) ? i : -1).filter(i => i >= 0), deseason = fin.map(i => mv[i] / idx[(k0 + i) % 12]), fit = S.ols(fin.map(i => [1, i]), deseason), trendPerYr = fit.beta[1] * 12 / Math.max(S.mean(deseason), 1e-9);
+  const peak = idx.indexOf(Math.max(...idx)), trough = idx.indexOf(Math.min(...idx)), swing = idx[peak] / idx[trough] - 1, pStr = isFinite(p) ? (p < 0.001 ? 'p < 0.001' : 'p = ' + p.toFixed(3)) : '';
+  let h;
+  if (sig) h = MT.verdict('info', `Peak demand in ${MN[peak]} at ${(idx[peak] * 100).toFixed(0)}% of average, trough in ${MN[trough]} at ${(idx[trough] * 100).toFixed(0)}%`, `The seasonal swing from trough to peak is ${F.pct(swing, 0)}. The month-of-year pattern is statistically real (${pStr}) and accounts for about ${F.pct(adjR2, 0)} of the variation left after removing the trend. The underlying trend runs ${F.spct(trendPerYr, 1)} per year.`);
+  else if (tested) h = MT.verdict('neu', 'No reliable seasonal pattern found', `Month-to-month differences are no larger than random variation (${pStr}). The apparent peak (${MN[peak]}) and trough (${MN[trough]}) should not be used to move bids or budgets. The underlying trend runs ${F.spct(trendPerYr, 1)} per year.`);
+  else h = MT.verdict('neu', `Provisional: peak in ${MN[peak]}, trough in ${MN[trough]}`, `With ${usable} months each calendar month has a single comparison, so the pattern cannot be tested and may be partly noise or growth. The swing from trough to peak is ${F.pct(swing, 0)}. Use 36 or more months before acting on it.`);
+  if (tested && sig) { [peak, trough].forEach(m => { const r = ratio[m], mn = Math.min(...r), mx = Math.max(...r); if (mx / mn > 1.2) notes.push(`${MN[m]} swings by year: its level against trend ranges from ${(mn * 100).toFixed(0)}% to ${(mx * 100).toFixed(0)}%. A gap that wide usually means the peak moves with a holiday or event date (Lunar New Year, Easter, Ramadan, a promotion), which a monthly index cannot time.`); }); }
+  h += notesBlock(notes);
+  h += MT.stats([['Months of history', String(usable), yrs.toFixed(1) + ' years'], ['Granularity', daily ? 'Daily' : monthlyGrain ? 'Monthly' : 'Weekly or other', daily ? (dIdx ? 'weekday indices included' : 'weekday view needs 8 clean weeks per weekday') : 'no weekday view'], ['Peak month', MN[peak], sig ? (idx[peak] * 100).toFixed(0) + ' index' : prov ? 'provisional' : 'not reliable'], ['Trough month', MN[trough], sig ? (idx[trough] * 100).toFixed(0) + ' index' : prov ? 'provisional' : 'not reliable'], ['Annual trend', F.spct(trendPerYr, 1), 'de-seasonalized']]);
   h += '<div class="card"><div id="c1"></div><div id="c2"></div></div>';
-  h += '<div class="card"><h3>Monthly indices and multipliers</h3><p class="sub">Index 100 equals the average month. The multiplier applies your response strength (' + F.pct(damp, 0) + ') so bids and budgets move less than demand does.</p>' + MT.tbl(['Month', 'Seasonal index', 'Bid multiplier', 'Budget multiplier', 'Observations'], idx.map((x, i) => [MN[i], (x * 100).toFixed(0), mult(x).toFixed(2) + 'x', (x).toFixed(2) + 'x', usedMA ? cnt[i] : Math.round(yrs)]), { num: [1, 2, 3, 4] }) + '</div>';
-  if (dIdx) h += '<div class="card"><h3>Weekday indices</h3>' + MT.tbl(['Day', 'Index', 'Bid multiplier'], dIdx.map((x, i) => [DN[i], (x * 100).toFixed(0), mult(x).toFixed(2) + 'x']), { num: [1, 2] }) + '<div id="c3"></div></div>';
-  h += '<div class="actions"><button class="btn btn-secondary btn-sm" id="dl" type="button">Download multipliers (CSV)</button></div>';
-  h += MT.note('<b>Method.</b> Classical multiplicative decomposition: each month is divided by a centered 12-month moving average, ratios are averaged by calendar month and normalized to a mean of 1. Weekday indices divide each day by its centered 7-day average. Budget multipliers follow demand one for one; bid multipliers follow it at the response strength you choose. Search demand leads spend by days to weeks for considered purchases, so start ramping bids one to two weeks before the peak month.');
+  const head = ['Month', 'Seasonal index'].concat(tested ? ['Likely range'] : []).concat(showMult ? ['Starting bid adjustment', 'Budget phasing'] : []).concat(['Months compared']);
+  h += '<div class="card"><h3>Monthly indices' + (showMult ? ' and starting adjustments' : '') + '</h3><p class="sub">Index 100 equals the average month.' + (showMult ? ' The bid adjustment applies your response strength (' + F.pct(damp, 0) + ') so bids move less than demand does. Budget phasing is the index itself.' : ' Adjustments are not shown because the pattern is not reliable.') + '</p>' + MT.tbl(head, idx.map((x, i) => [MN[i], (x * 100).toFixed(0)].concat(tested ? [(lo[i] * 100).toFixed(0) + ' to ' + (hi[i] * 100).toFixed(0)] : []).concat(showMult ? [mult(x).toFixed(2) + 'x', x.toFixed(2) + 'x'] : []).concat([cnt[i]])), { num: head.map((_, i) => i).slice(1) }) + '</div>';
+  if (dIdx) h += '<div class="card"><h3>Weekday indices</h3>' + MT.tbl(['Day', 'Index', 'Starting bid adjustment'], dIdx.map((x, i) => [DN[i], (x * 100).toFixed(0), mult(x).toFixed(2) + 'x']), { num: [1, 2] }) + '<div id="c3"></div></div>';
+  if (showMult) h += '<div class="actions"><button class="btn btn-secondary btn-sm" id="dl" type="button">Download adjustments (CSV)</button></div>';
+  h += MT.note('<b>What this does not do.</b> The curve is built from search volume or whatever series you gave it, not from conversion rate or conversion value, which are what bids should follow. Treat the adjustments as a starting point to test, not a set-and-forget rule. Google Ads seasonality adjustments are meant for short events with a known change in conversion rate. A monthly index also cannot time moving holidays (Easter, Ramadan, Lunar New Year) or a one-off promotion, and it cannot separate regions or languages that peak at different times.');
+  h += MT.note('<b>Method.</b> Classical multiplicative decomposition: each month is divided by a centered 12-month moving average, ratios are averaged by calendar month and normalized to a mean of 1. The significance test is a one-way analysis of variance on the ratios, and the likely range is about two standard errors around each index. Weekday indices divide each day by its centered 7-day average. Search demand leads spend by days to weeks for considered purchases, so start ramping bids one to two weeks before a peak month.');
   $('#out').innerHTML = h;
   const xs = MT.range(12);
   C.line($('#c1'), { title: 'Seasonal index by month', xs, xFmt: v => MN[Math.round(v)] || '', yFmt: v => (v * 100).toFixed(0), series: [{ name: 'Seasonal index', values: idx, color: 'var(--series-1)' }, { name: 'Average (100)', values: xs.map(() => 1), color: 'var(--series-2)', dash: '5 4' }], height: 220 });
-  C.line($('#c2'), { title: 'Monthly demand: actual, de-seasonalized trend', xs: keys.map((k, i) => i), xFmt: i => { const k = keys[Math.round(i)], y = Math.floor(k / 12); return MN[k % 12] + " '" + String(y).slice(2); }, series: [{ name: 'Actual', values: mv, color: 'var(--series-1)', width: 1.4 }, { name: 'De-seasonalized', values: deseason, color: 'var(--series-3)' }], height: 240, table: false });
+  C.line($('#c2'), { title: 'Monthly demand per day: actual, de-seasonalized trend', xs: fin, xFmt: i => { const k = k0 + Math.round(i), y = Math.floor(k / 12); return MN[k % 12] + " '" + String(y).slice(2); }, series: [{ name: 'Actual', values: fin.map(i => mv[i]), color: 'var(--series-1)', width: 1.4 }, { name: 'De-seasonalized', values: deseason, color: 'var(--series-3)' }], height: 240, table: false });
   if (dIdx) C.bars($('#c3'), { title: 'Weekday index', cats: DN, series: [{ name: 'Index', values: dIdx.map(x => x * 100), color: 'var(--series-1)' }], yFmt: v => v.toFixed(0), ref: 100 });
-  $('#dl').addEventListener('click', () => MT.download('seasonality-multipliers.csv', MT.toCSV([['month', 'index', 'bid_multiplier', 'budget_multiplier']].concat(idx.map((x, i) => [MN[i], x.toFixed(3), mult(x).toFixed(3), x.toFixed(3)]))), 'text/csv'));
+  const dl = $('#dl'); if (dl) dl.addEventListener('click', () => MT.download('seasonality-adjustments.csv', MT.toCSV([['month', 'index', 'bid_adjustment', 'budget_phasing']].concat(idx.map((x, i) => [MN[i], x.toFixed(3), mult(x).toFixed(3), x.toFixed(3)]))), 'text/csv'));
 }
 $('#go').addEventListener('click', run);
 })();

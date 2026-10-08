@@ -31,6 +31,7 @@
         <div class="field"><label for="abVar">Variant column</label><select id="abVar"></select></div>
         <div class="field"><label for="abOut">Outcome column</label><select id="abOut"></select></div>
         <div class="field"><label for="abCtrl">Control variant</label><select id="abCtrl"></select></div>
+        <div class="field"><label for="abBlank">Blank outcome cells (value per visitor)</label><select id="abBlank"><option value="zero">Count as zero</option><option value="skip">Leave out</option></select><span class="hint">Use zero when the export leaves non-buyers blank.</span></div>
       </div>
     </div>
     <div class="actions"><span class="lbl">Try a sample:</span><button class="btn btn-secondary btn-sm" data-s="ab2" type="button">A/B conversion</button><button class="btn btn-secondary btn-sm" data-s="abn" type="button">A/B/n conversion</button><button class="btn btn-secondary btn-sm" data-s="abcont" type="button">Revenue per visitor (raw)</button></div>
@@ -109,7 +110,9 @@ $('#abMetric').addEventListener('change', renderAb);
 $('#abFmt').addEventListener('change', () => { const raw = $('#abFmt').value === 'raw'; $('#abTableBox').hidden = raw; $('#abRawBox').hidden = !raw; });
 let abTab = null;
 function abLoad(text) { abTab = MT.readTable(text); const c = abTab.cols; MT.fillSelect($('#abVar'), c, /variant|group|arm|test|bucket|cell/i); MT.fillSelect($('#abOut'), c.filter(x => x !== $('#abVar').value).concat(c.filter(x => x === $('#abVar').value)), /convert|conv|outcome|revenue|value|purchase|success|order/i); abCtrls(); }
-function abCtrls() { if (!abTab) return; const v = $('#abVar').value, lv = Array.from(new Set(abTab.rows.map(r => String(r[v]).trim()))).sort(); $('#abCtrl').innerHTML = lv.map(l => `<option>${esc(l)}</option>`).join(''); const g = lv.find(l => /control|baseline|default|original|^a$/i.test(l)); if (g) $('#abCtrl').value = g; }
+const labelKey = x => String(x == null ? '' : x).normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase();
+function labelMap(vals) { const m = new Map(); vals.forEach(v => { const k = labelKey(v); if (!m.has(k)) m.set(k, { label: String(v).trim().replace(/\s+/g, ' '), spellings: new Set(), n: 0 }); const e = m.get(k); e.spellings.add(String(v).trim()); e.n++; }); return m; }
+function abCtrls() { if (!abTab) return; const v = $('#abVar').value, lv = Array.from(labelMap(abTab.rows.map(r => r[v])).values()).map(x => x.label).sort(); $('#abCtrl').innerHTML = lv.map(l => `<option>${esc(l)}</option>`).join(''); const g = lv.find(l => /control|baseline|default|original|^a$/i.test(l)); if (g) $('#abCtrl').value = g; }
 $('#abVar').addEventListener('change', abCtrls);
 MT.dropzone($('#abDrop'), t => { $('#abPaste').value = t; abLoad(t); });
 $('#abPaste').addEventListener('input', MT.debounce(() => abLoad($('#abPaste').value), 250));
@@ -123,9 +126,18 @@ function readAB(o) {
     if (!abTab) throw new Error('Paste or upload your CSV first.');
     const vc = $('#abVar').value, oc = $('#abOut').value, ctrl = $('#abCtrl').value, m = new Map();
     if (vc === oc) throw new Error('Variant and outcome must be different columns.');
-    abTab.rows.forEach(r => { const k = String(r[vc]).trim(); let v = r[oc]; if (bin) { const s = String(v).trim().toLowerCase(); v = ['1', 'true', 'yes', 'y', 'converted', 'purchase'].includes(s) ? 1 : ['0', 'false', 'no', 'n', ''].includes(s) ? 0 : (MT.num(v) > 0 ? 1 : 0); } else { v = MT.num(v); if (!isFinite(v)) return; } if (!m.has(k)) m.set(k, []); m.get(k).push(v); });
-    const names = [ctrl].concat(Array.from(m.keys()).filter(k => k !== ctrl).sort()); if (!m.has(ctrl)) throw new Error('Control variant not found.');
-    groups = names.map(k => { const a = m.get(k); return bin ? { name: k, n: a.length, x: S.sum(a) } : { name: k, raw: a, n: a.length }; });
+    const lm = labelMap(abTab.rows.map(r => r[vc])), ck = labelKey(ctrl), notes = o.dataNotes = o.dataNotes || []; let blank = 0, unknown = 0; const fmtO = MT.numFmt(abTab.rows.map(r => r[oc]));
+    lm.forEach(e => { if (e.spellings.size > 1) notes.push(`Variant spellings treated as one group: ${Array.from(e.spellings).join(', ')}.`); });
+    const zeroBlank = !bin && $('#abBlank').value === 'zero';
+    abTab.rows.forEach(r => { const k = labelKey(r[vc]); if (k === '') return; let v = r[oc]; const t = String(v == null ? '' : v).trim().toLowerCase();
+      if (bin) { if (['1', 'true', 'yes', 'y', 'converted', 'purchase', 'oui'].includes(t)) v = 1; else if (['0', 'false', 'no', 'n', 'non'].includes(t)) v = 0; else if (t === '') { blank++; v = 0; } else { const num = MT.num(v, fmtO); if (!isFinite(num)) { unknown++; return; } v = num > 0 ? 1 : 0; } }
+      else { if (t === '') { if (zeroBlank) { blank++; v = 0; } else return; } else { v = MT.num(v, fmtO); if (!isFinite(v)) { unknown++; return; } } }
+      if (!m.has(k)) m.set(k, []); m.get(k).push(v); });
+    if (blank) notes.push(`${blank} blank outcome cell${blank === 1 ? '' : 's'} counted as ${bin ? 'not converted' : 'zero'}. If blank means "unknown" in your export, remove those rows first.`);
+    if (unknown) notes.push(`${unknown} row${unknown === 1 ? '' : 's'} with an unreadable outcome (N/A or text) left out.`);
+    if (abTab.cols.length >= 3) { const sig = new Map(); abTab.rows.forEach(r => { const k = JSON.stringify(abTab.cols.map(c => r[c])); sig.set(k, (sig.get(k) || 0) + 1); }); let dup = 0; sig.forEach(c => { if (c > 1) dup += c - 1; }); if (dup >= 20 && dup >= abTab.rows.length * 0.005) notes.push(`${dup} rows are exact copies of another row across all ${abTab.cols.length} columns. If each row should be one visitor, duplicates inflate the counts; remove them and rerun.`); }
+    const names = [ck].concat(Array.from(m.keys()).filter(k => k !== ck).sort()); if (!m.has(ck)) throw new Error('Control variant not found.');
+    groups = names.map(k => { const a = m.get(k), name = lm.get(k).label; return bin ? { name, n: a.length, x: S.sum(a) } : { name, raw: a, n: a.length }; });
   }
   const sp = $('#abSplit').value.trim(); if (sp) { const w = sp.split(/[,\s:\/]+/).map(Number).filter(isFinite); if (w.length !== groups.length) throw new Error(`Planned split has ${w.length} numbers but there are ${groups.length} variants.`); o.split = w; }
   return groups;
@@ -196,7 +208,7 @@ $('#run').addEventListener('click', async () => {
   const btn = $('#run'), st = $('#status'); $('#err').textContent = ''; $('#results').innerHTML = ''; btn.disabled = true;
   try {
     const o = opts(); let res;
-    if (mode === 'ab') { const g = readAB(o); o.metric = $('#abMetric').value; res = E.analyzeAB(g, o); }
+    if (mode === 'ab') { const g = readAB(o); o.metric = $('#abMetric').value; res = E.analyzeAB(g, o); (o.dataNotes || []).forEach(n => res.notes.push(n)); }
     else if (mode === 'mv') { const cells = readMV(o); res = E.analyzeMV(cells, o); }
     else { const b = readQX(o); st.textContent = 'Working...'; res = await E.analyzeQX(b.D, b.e, o, msg => st.textContent = msg + '...'); res.dataNotes = b.notes; res.opt = o; if (o.seasonAuto && o.season > 1 && b.D.donors.length === 0) res.notes.push(`Weekly-style seasonality (period ${o.season}) was inferred from the date spacing.`); (b.notes || []).forEach(n => res.notes.push(n)); }
     res.o = o; lastRes = res; render(res, o); st.textContent = '';
@@ -210,8 +222,10 @@ const kindOf = c => c === 'pos' ? 'pos' : c === 'neg' ? 'neg' : 'neu';
 const ebadge = (c, better) => { if (!c.sig) return MT.tag('No difference detected'); const good = (better === 'low' ? -c.est : c.est) > 0; return good ? MT.tag('Better', 'good') : MT.tag('Worse', 'bad'); };
 function render(res, o) {
   const out = $('#results'); let h = '';
-  h += MT.verdict(kindOf(res.verdict.cls), res.verdict.title, esc(res.verdict.text));
-  if (res.verdict.caution) h += MT.note('<b>Caution.</b> ' + esc(res.verdict.caution), 'warn');
+  const bad = res.kind !== 'qx' && res.diag.find(d => d.s === 'bad');
+  if (bad) h += MT.verdict('info', 'Do not act on this result yet', esc(bad.t) + ' For reference only, the numbers below say: ' + esc(res.verdict.title) + '.');
+  else h += MT.verdict(kindOf(res.verdict.cls), res.verdict.title, esc(res.verdict.text));
+  if (res.verdict.caution && !bad) h += MT.note('<b>Caution.</b> ' + esc(res.verdict.caution), 'warn');
   h += '<div class="card"><h3>How the model was chosen</h3><div class="path">' + res.path.map((p, i) => (i ? '<span class="arr" aria-hidden="true">\u2192</span>' : '') + `<span class="node${i === res.path.length - 1 ? ' pick' : ''}">${esc(p)}</span>`).join('') + '</div>' + (res.method ? `<p><b>Method:</b> ${esc(res.method)}</p>` : '') + '<ul style="padding-left:1.2rem;margin:.5rem 0 0;font-size:.85rem;color:var(--ink-secondary)">' + res.why.map(w => `<li style="margin-bottom:.3rem">${esc(w)}</li>`).join('') + '</ul></div>';
   out.innerHTML = h; const sec = document.createElement('div'); out.appendChild(sec);
   if (res.kind === 'ab') renderAB(res, o, sec); else if (res.kind === 'mv') renderMV(res, o, sec); else renderQX(res, o, sec);

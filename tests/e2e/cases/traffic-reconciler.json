@@ -1,0 +1,40 @@
+[
+ {
+  "tool": "traffic-reconciler",
+  "file": "01-happy-ecommerce-ads-vs-ga4.csv",
+  "must": [
+   "display_prospecting",
+   "Investigate"
+  ],
+  "mustnot": [
+   "No usable rows"
+  ]
+ },
+ {
+  "tool": "traffic-reconciler",
+  "file": "02-messy-quebec-bilingual-lead-gen.csv",
+  "must": [
+   "4 judged campaigns",
+   "added together",
+   "not numbers",
+   "Data quality"
+  ],
+  "mustnot": [
+   "No usable rows",
+   "Total\t"
+  ]
+ },
+ {
+  "tool": "traffic-reconciler",
+  "file": "06-edge-tiny-volume-and-zero-clicks.csv",
+  "must": [
+   "Too few clicks",
+   "zero clicks",
+   "Above range",
+   "dup_tag_campaign"
+  ],
+  "mustnot": [
+   "Sessions are 87% of platform clicks; 1 of"
+  ]
+ }
+]

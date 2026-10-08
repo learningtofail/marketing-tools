@@ -1,0 +1,71 @@
+[
+ {
+  "tool": "demand-capacity-guardrail",
+  "file": "a_happy_inputs.json",
+  "must": [
+   "$2,328",
+   "Day-1 forecast 332"
+  ],
+  "mustnot": [
+   "Day-1 forecast 0"
+  ],
+  "setup": {
+   "nofile": true,
+   "jsonfields": true,
+   "hist": "a_happy_history.csv",
+   "po": [
+    [
+     20,
+     5000
+    ]
+   ]
+  }
+ },
+ {
+  "tool": "demand-capacity-guardrail",
+  "file": "b_messy_inputs.json",
+  "must": [
+   "History checks",
+   "not numbers"
+  ],
+  "mustnot": [
+   "Day-1 forecast 0"
+  ],
+  "setup": {
+   "nofile": true,
+   "jsonfields": true,
+   "hist": "b_messy_history.txt"
+  }
+ },
+ {
+  "tool": "demand-capacity-guardrail",
+  "file": "c_trap_inputs.json",
+  "must": [
+   "too few to fit a trend"
+  ],
+  "mustnot": [
+   "day 60 forecast 819"
+  ],
+  "setup": {
+   "nofile": true,
+   "jsonfields": true,
+   "hist": "c1_trap_ramp_history.csv"
+  }
+ },
+ {
+  "tool": "demand-capacity-guardrail",
+  "file": "c_trap_inputs.json",
+  "must": [
+   "zero-sales day",
+   "stock-outs"
+  ],
+  "mustnot": [
+   "Day-1 forecast 0"
+  ],
+  "setup": {
+   "nofile": true,
+   "jsonfields": true,
+   "hist": "c2_trap_censored_history.csv"
+  }
+ }
+]

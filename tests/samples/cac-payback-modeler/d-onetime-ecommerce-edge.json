@@ -1,0 +1,1 @@
+{"_note":"One-time purchase retailer modelled as churn 100 percent (only way to express it). Curve '100' is the workaround for the empty-curve bug.","cust":3200,"paid":150000,"agency":18000,"mkt":35000,"sales":0,"tools":9000,"arpu":64,"cogs":48,"var":9,"churn":100,"basis":"full","disc":0,"hor":12,"curve":"100","curve_clean":[100]}

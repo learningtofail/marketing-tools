@@ -1,8 +1,8 @@
 <!--META {"title":"Feature-to-Messaging Gap Analyzer","short":"Check which shipped features your launch copy never mentions, and which are named without a customer benefit.","desc":"Paste release notes and draft marketing copy. The tool extracts each feature, matches it against the copy by keyword overlap, and returns a coverage matrix marking features as covered with benefit, mentioned without benefit, or missing.","tag":"Messaging"} -->
 <div class="split">
 <div>
-  <div class="card"><h3>Release notes</h3><p class="sub">One feature per line or bullet. Headings and blank lines are ignored.</p><div class="field"><textarea id="notes" rows="10" placeholder="- Added bulk CSV export for reports&#10;- New role-based permissions for team workspaces"></textarea></div></div>
-  <div class="card"><h3>Marketing copy</h3><div class="field"><textarea id="copy" rows="10" placeholder="Paste the launch email, landing page or announcement copy."></textarea></div>
+  <div class="card"><h3>Release notes</h3><p class="sub">One feature per line or bullet. Headings and blank lines are ignored. Bug fixes, internal work, known issues, sub-bullets and duplicates are left out and listed in the results.</p><div class="field"><textarea id="f_notes" rows="10" placeholder="- Added bulk CSV export for reports&#10;- New role-based permissions for team workspaces"></textarea></div></div>
+  <div class="card"><h3>Marketing copy</h3><div class="field"><textarea id="f_copy" rows="10" placeholder="Paste the launch email, landing page or announcement copy."></textarea></div>
     <div class="row2"><div class="field"><label for="thr">Match strictness</label><select id="thr"><option value="0.34">Loose (34% of feature terms)</option><option value="0.5" selected>Balanced (50%)</option><option value="0.67">Strict (67%)</option></select></div></div>
     <div class="actions"><button class="btn btn-primary" id="go" type="button">Analyze coverage</button><button class="btn btn-secondary btn-sm" id="smp" type="button">Load sample</button></div></div>
 </div>
@@ -11,33 +11,66 @@
 <script>
 (function () {
 const $ = MT.$, F = MT.fmt, C = MT.chart;
-const BEN = /\b(save|saves|saving|faster|quicker|easier|easy|simpler|reduce|reduces|cut|cuts|increase|increases|boost|grow|avoid|prevent|eliminate|without|so you can|so that|helps? you|lets? you|allows? you|never have to|no more|instantly|in seconds|in minutes|hours|effortless|confidence|control|peace of mind)\b/i;
-const FILL = new Set(['added', 'add', 'new', 'now', 'improved', 'improve', 'improvements', 'updated', 'update', 'support', 'supports', 'fixed', 'fix', 'feature', 'features', 'release', 'launch', 'launched', 'introducing', 'enhanced', 'enhancement', 'ability', 'option', 'options', 'also', 'users', 'user', 'can', 'more']);
-const terms = s => Array.from(new Set(MT.tokens(s).map(MT.stem).filter(w => w.length > 2 && !FILL.has(w))));
+const rx = src => new RegExp('(^|[^\\p{L}])(?:' + src + ')(?![\\p{L}])', 'iu');
+/* Benefit words must sit in the same sentence as the feature. "hours", "control" and "confidence" are too loose to count. */
+const BEN = rx('save|saves|saving|faster|quicker|easier|easy|simpler|reduce|reduces|cut|cuts|increase|increases|boost|grow|avoid|prevent|eliminate|without|so you|before you|so that|so every|so they|so your|so teams?|so donors?|so customers?|helps? you|lets? you|allows? you|never have to|no more|instantly|in seconds|in minutes|effortless|peace of mind|get paid'),
+  BEN_FR = rx('économis\\w*|economis\\w*|gagn\\w*|plus (?:rapide|simple|facile|vite)\\w*|sans|évit\\w*|evit\\w*|réduis\\w*|reduis\\w*|réduit\\w*|pour que|afin de|instantané\\w*|en quelques (?:secondes|minutes)|facilit\\w*|simplifi\\w*');
+const FILL = new Set(['added', 'add', 'adds', 'new', 'now', 'improved', 'improve', 'improvements', 'improvement', 'updated', 'update', 'updates', 'support', 'supports', 'fixed', 'fix', 'feature', 'features', 'release', 'launch', 'launched', 'introducing', 'introduces', 'introduced', 'enhanced', 'enhancement', 'enhancements', 'ability', 'option', 'options', 'also', 'users', 'user', 'can', 'more', 'ajout', 'ajoute', 'nouveau', 'nouvelle', 'nouvelles', 'nouveaux', 'amelioration', 'ameliorations', 'ameliore', 'mise', 'jour']);
+const FR_STOP = new Set('le la les un une des du de d l et ou en au aux pour par sur dans avec chez est sont ce ces cet cette qui que sans vos votre vous nous notre nos leur leurs mode a vers selon tout tous toute toutes chaque plus'.split(' '));
+const SKIPSEC = /bug|fix|under the hood|internal|known issue|technical|maintenance|chore|deprecat|correctif|correction|problèmes? connus|interne|sous le capot/i;
+const LEFT = /^(fixed|fix|fixes|bugfix|resolved|upgraded|upgrade to|migrated|bump|bumped|refactor|refactored|chore|corrig|correctif|mis à jour|mise à jour de|migr|known issue)/i;
+/* Common abbreviations are expanded on both sides so "SSO" and "single sign-on" match. */
+const ABBR = [[/\bsso\b/g, 'single sign on'], [/\b2fa\b|\bmfa\b/g, 'two factor authentication'], [/\bp2p\b/g, 'peer to peer']];
+const norm = s => ABBR.reduce((t, [re, to]) => t.replace(re, to), String(s || '').toLowerCase()).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[’‘]/g, "'");
+function stem(w) { if (w.length < 4 || !/^[a-z]+$/.test(w)) return w; let x = w; if (/ies$/.test(x)) x = x.slice(0, -3) + 'y'; else if (!/(ss|us|is)$/.test(x) && /s$/.test(x)) x = x.slice(0, -1); if (x.length > 5 && /ing$/.test(x)) { x = x.slice(0, -3); if (/([^aeiou])\1$/.test(x)) x = x.slice(0, -1); } return x.replace(/e$/, ''); }
+const terms = s => Array.from(new Set((norm(s).match(/[\p{L}\p{N}]+/gu) || []).filter(w => w.length > 1 && !MT.stop.has(w) && !FR_STOP.has(w) && !FILL.has(w)).map(stem)));
+const isFrench = t => { const w = norm(t).match(/[\p{L}]+/gu) || [], fr = w.filter(x => ['le', 'la', 'les', 'des', 'pour', 'dans', 'avec', 'une', 'est', 'et', 'du', 'au', 'aux', 'sur', 'vous', 'nous', 'vos', 'votre'].includes(x)).length, en = w.filter(x => ['the', 'and', 'to', 'of', 'is', 'you', 'your', 'with', 'for', 'in'].includes(x)).length; return fr > en; };
+function parseNotes(text) {
+  const out = [], left = [], seen = new Set(); let skipSec = false, prevIndent = -1;
+  text.split(/\r?\n/).forEach(l0 => {
+    if (!l0.trim()) return;
+    const hm = l0.match(/^\s*#{1,6}\s*(.*)$/); if (hm) { skipSec = SKIPSEC.test(hm[1]); prevIndent = -1; return; }
+    const indent = l0.match(/^\s*/)[0].replace(/\t/g, '  ').length;
+    const s = l0.replace(/^\s*(?:[-*•▪◦]\s+|\d+[.)]\s+)/, '').replace(/[*_`]+/g, '').replace(/\s*\((?:\d{4}-\d{2}-\d{2}|v?\d[\d.]*)\)\s*$/, '').trim();
+    if (!s) return;
+    if (skipSec) { left.push([s, 'Under a bug fix, internal or known-issues heading']); return; }
+    if (prevIndent >= 0 && indent > prevIndent) { left.push([s, 'Sub-bullet of the line above, not counted separately']); return; }
+    if (LEFT.test(s)) { left.push([s, 'Fix or internal work']); return; }
+    const t = terms(s); if (!t.length) { left.push([s, 'No content words to match']); return; }
+    const key = t.slice().sort().join(' '); if (seen.has(key)) { left.push([s, 'Duplicate of an earlier line']); return; } seen.add(key);
+    out.push(s); prevIndent = indent;
+  });
+  return { lines: out, left };
+}
 function run() {
-  const lines = $('#notes').value.split('\n').map(s => s.replace(/^\s*([-*•]|\d+[.)])\s*/, '').trim()).filter(s => s && !/^#{1,6}\s/.test(s) && s.length > 6), copy = $('#copy').value.trim(), thr = +$('#thr').value;
-  if (!lines.length || !copy) { $('#out').innerHTML = '<div class="card"><p class="muted">Paste release notes and marketing copy to see coverage.</p></div>'; return; }
-  const sents = copy.split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(Boolean), st = sents.map(s => new Set(terms(s))), all = new Set(terms(copy)), df = new Map(); st.forEach(set => set.forEach(w => df.set(w, (df.get(w) || 0) + 1)));
-  const res = lines.map(f => { const ft = terms(f); if (!ft.length) return { f, status: 'skip' }; let best = -1, bs = 0, bhits = []; st.forEach((set, i) => { const hits = ft.filter(w => set.has(w)), s = hits.length / ft.length; if (s > bs || (s === bs && hits.length > bhits.length)) { bs = s; best = i; bhits = hits; } }); const anywhere = ft.filter(w => all.has(w)).length / ft.length; const covered = bs >= thr, benefit = covered && (BEN.test(sents[best]) || (sents[best + 1] && BEN.test(sents[best + 1]) && bs >= thr)); return { f, ft, best: covered ? sents[best] : '', bs, anywhere, status: !covered ? (anywhere >= thr ? 'scattered' : 'missing') : benefit ? 'covered' : 'feature' }; }).filter(r => r.status !== 'skip');
+  const notesTxt = $("#f_notes").value, copy = $("#f_copy").value.trim(), thr = +$('#thr').value;
+  if (!notesTxt.trim() || !copy) { $('#out').innerHTML = MT.notComputed('Paste both texts', ['Nothing was analysed. Paste the release notes and the marketing copy.']); return; }
+  const pn = parseNotes(notesTxt), lines = pn.lines;
+  if (!lines.length) { $('#out').innerHTML = MT.notComputed('No customer-facing features found', ['Every line was a heading, fix, internal item, sub-bullet or duplicate. ' + pn.left.length + ' line' + (pn.left.length === 1 ? '' : 's') + ' left out.']); return; }
+  const fr = isFrench(copy) || isFrench(notesTxt), benRe = s => BEN.test(s) || (fr && BEN_FR.test(s));
+  const sents = copy.replace(/([.!?])\s+/g, '$1\u0001').split(/\u0001|\n+/).map(s => s.trim()).filter(Boolean), st = sents.map(s => new Set(terms(s))), all = new Set(terms(copy));
+  const res = lines.map(f => { const ft = terms(f); let best = -1, bs = 0, bhits = []; st.forEach((set, i) => { const hits = ft.filter(w => set.has(w)), sc = hits.length / ft.length; if (sc > bs || (sc === bs && hits.length > bhits.length)) { bs = sc; best = i; bhits = hits; } }); const anywhere = ft.filter(w => all.has(w)).length / ft.length, covered = bs >= thr, benefit = covered && ft.length > 1 && benRe(sents[best]); return { f, ft, best: covered ? sents[best] : '', bs, anywhere, one: ft.length === 1, status: !covered ? (anywhere >= thr ? 'scattered' : 'missing') : benefit ? 'covered' : 'feature' }; });
   const c = k => res.filter(r => r.status === k).length, n = res.length, miss = c('missing'), sc = c('scattered');
-  const cov = (c('covered') + c('feature')) / n;
-  let h = MT.rag(miss + sc === 0 && c('feature') === 0 ? 'green' : cov < 0.6 ? 'red' : 'yellow', `${F.pct(cov, 0)} of ${n} features appear in the copy; ${c('covered')} with a benefit`, [`${miss} missing entirely, ${sc} spread across sentences without one clear mention, ${c('feature')} named without a customer benefit.`]);
-  h += MT.stats([['Features', String(n), ''], ['Covered with benefit', String(c('covered')), F.pct(c('covered') / n, 0), 'good'], ['Feature only', String(c('feature')), 'no benefit language', c('feature') ? 'warn' : ''], ['Scattered', String(sc), 'terms present, no single mention', sc ? 'warn' : ''], ['Missing', String(miss), 'not in the copy', miss ? 'bad' : 'good']]);
-  const tg = { covered: MT.tag('Covered', 'good'), feature: MT.tag('Feature only', 'warn'), scattered: MT.tag('Scattered', 'warn'), missing: MT.tag('Missing', 'bad') }, ord = { missing: 0, scattered: 1, feature: 2, covered: 3 };
-  h += '<div class="card"><h3>Coverage matrix</h3>' + MT.tbl(['Feature', 'Status', 'Match', 'Best matching sentence'], res.slice().sort((a, b) => ord[a.status] - ord[b.status]).map(r => [r.f, { h: tg[r.status] }, F.pct(r.status === 'scattered' ? r.anywhere : r.bs, 0), r.best || '—']), { num: [2] }) + '<div class="actions"><button class="btn btn-secondary btn-sm" id="dl" type="button">Download CSV</button></div></div>';
+  const cov = (c('covered') + c('feature')) / n, shown = r => r.status === 'scattered' ? r.anywhere : r.bs;
+  let h = MT.rag(miss + sc === 0 && c('feature') === 0 && !fr ? 'green' : cov < 0.6 ? 'red' : 'yellow', `${F.pct(cov, 0)} of ${n} features appear in the copy; ${c('covered')} with benefit wording`, [`${miss} missing entirely, ${sc} spread across sentences without one clear mention, ${c('feature')} named without benefit wording. ${pn.left.length ? pn.left.length + ' note line' + (pn.left.length === 1 ? '' : 's') + ' left out (fixes, internal work, duplicates; listed below).' : ''}`]);
+  h += MT.stats([['Features', String(n), pn.left.length + ' lines left out'], ['Benefit wording found', String(c('covered')), F.pct(c('covered') / n, 0) + ', not verified', 'good'], ['Feature only', String(c('feature')), 'no benefit wording', c('feature') ? 'warn' : ''], ['Scattered', String(sc), 'terms present, no single mention', sc ? 'warn' : ''], ['Missing', String(miss), 'not in the copy', miss ? 'bad' : 'good']]);
+  if (fr) h += MT.note('<b>French text detected.</b> Matching ignores accents and common French words, but synonyms and word forms (for example exportation and exportez) will not match, and benefit wording is checked with a short French list. Read every Missing and Feature only row yourself.', 'warn');
+  const tg = { covered: MT.tag('Benefit wording', 'good'), feature: MT.tag('Feature only', 'warn'), scattered: MT.tag('Scattered', 'warn'), missing: MT.tag('Missing', 'bad') }, ord = { missing: 0, scattered: 1, feature: 2, covered: 3 };
+  h += '<div class="card"><h3>Coverage matrix</h3>' + MT.tbl(['Feature', 'Status', 'Match', 'Best matching sentence'], res.slice().sort((a, b) => ord[a.status] - ord[b.status]).map(r => [r.f, { h: tg[r.status] + (r.one && r.status !== 'missing' && r.status !== 'scattered' ? ' ' + MT.tag('One-word match, check', 'warn') : '') }, F.pct(shown(r), 0), r.best || 'None']), { num: [2] }) + '<div class="actions"><button class="btn btn-secondary btn-sm" id="dl" type="button">Download CSV</button></div></div>';
+  if (pn.left.length) h += '<div class="card"><h3>Lines left out (' + pn.left.length + ')</h3><p class="sub">These were not counted as features. If one is a real feature, rewrite it without a leading "Fixed" or "Upgraded" or move it out of the fixes section.</p>' + MT.tbl(['Line', 'Why'], pn.left.map(x => [x[0], x[1]])) + '</div>';
   const need = res.filter(r => r.status === 'missing' || r.status === 'scattered' || r.status === 'feature');
   if (need.length) h += '<div class="card"><h3>Copy to write</h3><p class="sub">Each line is a prompt for a benefit sentence. Fill in the outcome your customer gets.</p>' + MT.tbl(['Feature', 'Suggested pattern'], need.map(r => [r.f, r.status === 'feature' ? `Add the outcome to the existing line: "${r.best}" plus "so you can [result]".` : `New line: "[Who] can now [do this], so [benefit]." Base it on: ${r.f}`])) + '</div>';
-  h += MT.note('<b>Method.</b> Each feature line is reduced to stemmed content terms. A feature counts as covered when one sentence of the copy contains at least the strictness share of its terms. Benefit language is detected by outcome words such as save, faster, reduce, without or so you can in that sentence or the next. Keyword overlap misses paraphrases, so review Missing rows for synonyms before adding copy.');
-  $('#out').innerHTML = h; $('#dl').addEventListener('click', () => MT.download('messaging-gap.csv', MT.toCSV([['feature', 'status', 'match', 'best_sentence']].concat(res.map(r => [r.f, r.status, (r.bs || 0).toFixed(2), r.best]))), 'text/csv'));
+  h += MT.note('<b>Method.</b> Each feature line is reduced to content words (plurals, accents and hyphens ignored). A feature counts as covered when one sentence of the copy contains at least the strictness share of its terms. Benefit wording is a hint, not proof: an outcome word such as save, faster, reduce, without or so you can has to sit in that same sentence. Keyword overlap misses paraphrases and brand names for a feature, so review Missing rows for synonyms before adding copy.');
+  $('#out').innerHTML = h; $('#dl').addEventListener('click', () => MT.download('messaging-gap.csv', MT.toCSV([['feature', 'status', 'match', 'best_sentence']].concat(res.map(r => [r.f, r.status, shown(r).toFixed(2), r.best]))), 'text/csv'));
 }
-$('#smp').addEventListener('click', () => { $('#notes').value = `## Release 4.2
+$('#smp').addEventListener('click', () => { $("#f_notes").value = `## Release 4.2
 - Added bulk CSV export for reports
 - New role-based permissions for team workspaces
 - Scheduled report delivery to Slack
 - Two-factor authentication with authenticator apps
 - Dark mode for the dashboard
 - Audit log with 12-month retention
-- API rate limits raised to 600 requests per minute`; $('#copy').value = `Meet 4.2, our biggest release for growing teams. Export any report to CSV in bulk, so you can hand finance the numbers in seconds instead of hours. Give every teammate the right access with role-based permissions for each workspace. Reports now land in Slack on a schedule. Protect every login with two-factor authentication. Nights are easier on the eyes too.`; run(); });
+- API rate limits raised to 600 requests per minute`; $("#f_copy").value = `Meet 4.2, our biggest release for growing teams. Export any report to CSV in bulk, so you can hand finance the numbers in seconds instead of hours. Give every teammate the right access with role-based permissions for each workspace. Reports now land in Slack on a schedule. Protect every login with two-factor authentication. Nights are easier on the eyes too.`; run(); });
 $('#go').addEventListener('click', run);
 })();
 </script>

@@ -1,0 +1,57 @@
+[
+ {
+  "tool": "gtm-container-auditor",
+  "file": "01-ecommerce-clean-web-container.json",
+  "must": [
+   "health 100",
+   "No issues found"
+  ],
+  "mustnot": [
+   "Missing trigger"
+  ]
+ },
+ {
+  "tool": "gtm-container-auditor",
+  "file": "02-b2b-saas-messy-agency-container.json",
+  "must": [
+   "Disabled built-in variable",
+   "DLV - not defined",
+   "Duplicate tags"
+  ],
+  "mustnot": [
+   "{{firstName}}",
+   "Missing trigger"
+  ]
+ },
+ {
+  "tool": "gtm-container-auditor",
+  "file": "03-trap-trigger-group-healthcare-booking.json",
+  "must": [
+   "Unused variable"
+  ],
+  "mustnot": [
+   "Unused trigger",
+   "Missing trigger"
+  ]
+ },
+ {
+  "tool": "gtm-container-auditor",
+  "file": "04-server-side-container-publisher.json",
+  "must": [
+   "Server-side container"
+  ],
+  "mustnot": [
+   "no consent settings."
+  ]
+ },
+ {
+  "tool": "gtm-container-auditor",
+  "file": "05-large-enterprise-retail-container.json",
+  "must": [
+   "34 unused",
+   "185 unused",
+   "Showing the first 150"
+  ],
+  "mustnot": []
+ }
+]

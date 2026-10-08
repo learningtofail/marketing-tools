@@ -1,0 +1,22 @@
+[
+ {"tool": "affiliate-concentration-analyzer", "file": "a-travel-clean.csv", "setup": {"selects": {"#cp": "partner", "#cr": "revenue"}},
+  "must": ["Moderate concentration risk", "1,087", "9.2", "14 (18%)"], "mustnot": ["Possible sub-IDs"]},
+ {"tool": "affiliate-concentration-analyzer", "file": "b-nonprofit-messy.csv",
+  "must": ["Marathon des Coeurs alone provides 44.8%", "2,919", "€500 of unattributed revenue", "Run for Roses / N/A", "merged after ignoring case", "total row removed", "3 (33%)"], "mustnot": ["1000000", "Hope Run 5K, Montréal alone"]},
+ {"tool": "affiliate-concentration-analyzer", "file": "b-nonprofit-messy.csv", "setup": {"selects": {"#cr": ""}},
+  "must": ["Choose which columns hold the partner name and the revenue"], "mustnot": ["High concentration risk", "Low concentration risk"]},
+ {"tool": "affiliate-concentration-analyzer", "file": "c-fragmented-subids-trap.csv",
+  "must": ["Possible sub-IDs: 9 partners start with \"AutoGuide\"", "78.7%", "Moderate concentration risk"], "mustnot": ["Revenue is spread across many partners", "Low concentration risk"]},
+ {"tool": "affiliate-concentration-analyzer", "file": "c-five-equal-partners.csv",
+  "must": ["Small program: every partner matters", "cannot go below 2,000", "All 5 partners"], "mustnot": ["The top 3 partners provide"]},
+ {"tool": "affiliate-concentration-analyzer", "file": "c-three-equal-partners.csv",
+  "must": ["Small program: every partner matters", "cannot go below 3,333"], "mustnot": ["High concentration risk"]},
+ {"tool": "affiliate-concentration-analyzer", "file": "e-float-boundary-n80.csv",
+  "must": ["2 (50%)", "50% needs 1"], "mustnot": ["3 (75%)"]},
+ {"tool": "affiliate-concentration-analyzer", "file": "onepos.csv",
+  "must": ["High concentration risk", "100.0%", "10,000", "2 partners with zero or negative net revenue left out"], "mustnot": ["Need at least two"]},
+ {"tool": "affiliate-concentration-analyzer", "file": "negnet.csv",
+  "must": ["Alpha -$200", "left out of the shares"], "mustnot": []},
+ {"tool": "affiliate-concentration-analyzer", "file": "preamble.csv",
+  "must": ["2 lines above the header row ignored", "Alpha alone provides 51.0%"], "mustnot": []}
+]

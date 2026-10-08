@@ -11,14 +11,16 @@ Reads site.config.json:
   google_fonts  true to load the display fonts from Google Fonts (a third-party request)
   base_url      optional absolute URL of the folder, used for canonical tags
 
-Output: site/  (tool pages, index.html, docs/*.md)
+Output: site/  (tool pages, index.html, docs/*.md, examples/<slug>/ downloads)
 """
 import json, re, glob, os, html, shutil
+from urllib.parse import quote
 import markdown
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(ROOT, 'site')
 CFG = json.load(open(os.path.join(ROOT, 'site.config.json'), encoding='utf-8'))
+if 'MT_HOME_URL' in os.environ: CFG['home_url'] = os.environ['MT_HOME_URL']  # '' hides the home links (vendored copies)
 GROUPS = [
  ('Experimentation & Measurement', ['experiment-analyzer','brand-incrementality','attribution-window-normalizer','traffic-reconciler']),
  ('Unit Economics & Planning', ['cac-payback-modeler','affiliate-margin-calculator','affiliate-concentration-analyzer','promo-capacity-checker','demand-capacity-guardrail','seo-equivalent-value']),
@@ -46,6 +48,25 @@ def render_guide(md):
         h += '<h2>Input template</h2><p>Your file needs these columns. Extra columns are ignored, and column names can differ because you map them in the tool.</p><pre class="code">%s</pre><div class="actions"><button class="btn btn-secondary btn-sm" type="button" data-act="template">Download CSV template</button></div>' % html.escape(tpl.strip())
     return h, tpl
 
+KIND_TAG = {'happy': ('Happy path', 'tag-good'), 'messy': ('Messy data', 'tag-warn'), 'trap': ('Trap', 'tag-bad')}
+def examples_card(slug):
+    """Collapsed 'Example files' card for tools that ship examples/<slug>/manifest.json. All text is escaped; links are relative."""
+    mp = os.path.join(ROOT, 'examples', slug, 'manifest.json')
+    if not os.path.exists(mp): return ''
+    items = json.load(open(mp, encoding='utf-8'))
+    rows = ''
+    for it in items:
+        label, tcls = KIND_TAG[it['kind']]
+        if it.get('file') and not os.path.exists(os.path.join(ROOT, 'examples', slug, it['file'])): raise SystemExit('manifest lists missing file examples/%s/%s' % (slug, it['file']))
+        r = '<li class="example"><div class="example__head"><span class="tag %s">%s</span> <b class="example__label">%s</b></div><p class="example__note">%s</p>' % (tcls, label, html.escape(it['label']), html.escape(it['note']))
+        if it.get('values'):
+            r += '<table class="t example__values"><tbody>' + ''.join('<tr><th scope="row">%s</th><td>%s</td></tr>' % (html.escape(k), html.escape(str(v))) for k, v in it['values'].items()) + '</tbody></table>'
+        if it.get('file'):
+            r += '<p class="example__dl"><a class="btn btn-secondary btn-sm" href="examples/%s/%s" download>Download %s</a></p>' % (quote(slug), quote(it['file']), html.escape(it['file']))
+        rows += r + '</li>'
+    return ('<details class="card examples"><summary class="examples__summary">Example files <span class="tag">%d</span></summary>'
+            '<p class="sub">Sample data you can try in this tool. Each one shows what a correct reading looks like. All data is made up.</p><ul class="examples__list">%s</ul></details>\n' % (len(items), rows))
+
 shutil.rmtree(OUT, ignore_errors=True); os.makedirs(os.path.join(OUT, 'docs'))
 tpl_page, brand, home = read('template.html'), CFG.get('brand', 'Marketing Tools'), CFG.get('home_url', '')
 tools = {}
@@ -70,7 +91,7 @@ for p in sorted(glob.glob(os.path.join(ROOT, 'src', '*.html'))):
         '{{brandlink}}': ('<a class="brand serif" href="%s">%s</a>' % (html.escape(home), html.escape(brand))) if home else '<span class="brand serif">%s</span>' % html.escape(brand),
         '{{homelink}}': (' <a href="%s">All tools</a>' % html.escape(home)) if home else '',
         '{{tplbtn}}': '<button class="btn btn-secondary btn-sm" type="button" data-act="template">CSV template</button>\n    ' if template else '',
-        '{{guide}}': guide, '{{slugjs}}': json.dumps(slug), '{{templatejs}}': json.dumps(template).replace('</', '<\\/') if template else 'null',
+        '{{examples}}': examples_card(slug), '{{guide}}': guide, '{{slugjs}}': json.dumps(slug), '{{templatejs}}': json.dumps(template).replace('</', '<\\/') if template else 'null',
     }
     page = tpl_page
     for k, v in rep.items(): page = page.replace(k, v)
@@ -92,6 +113,7 @@ idx = idx.replace('{{cards}}', cards).replace('{{count}}', str(len(tools))).repl
 idx = idx.replace('Nothing is uploaded or stored.', 'Nothing is uploaded. Inputs are saved only on this device.')
 idx = re.sub(r'</main>', '</main>' + (inline_js(read('assets/lib.js')) if CFG['standalone'] else '<script src="assets/lib.js"></script>'), idx, count=1) if 'lib.js' not in idx else idx.replace('<script src="assets/lib.js"></script>', inline_js(read('assets/lib.js')) if CFG['standalone'] else '<script src="assets/lib.js"></script>')
 open(os.path.join(OUT, 'index.html'), 'w', encoding='utf-8').write(idx)
+if os.path.isdir(os.path.join(ROOT, 'examples')): shutil.copytree(os.path.join(ROOT, 'examples'), os.path.join(OUT, 'examples'))
 if not CFG['standalone']: shutil.copytree(os.path.join(ROOT, 'assets'), os.path.join(OUT, 'assets'))
 readme = read('README.site.md') if os.path.exists(os.path.join(ROOT, 'README.site.md')) else ''
 if readme: open(os.path.join(OUT, 'README.md'), 'w', encoding='utf-8').write(readme)

@@ -1,0 +1,22 @@
+{
+  "scenario": "Trap inputs for c1/c2: ample stock so only the forecast matters",
+  "fields": {
+    "inv": 30000,
+    "cap": 2000,
+    "safe": 300,
+    "hor": 60,
+    "base": 200,
+    "lift": 0,
+    "ps": 0,
+    "pd": 0,
+    "spend": 0,
+    "cpa": 25,
+    "upo": 1.0
+  },
+  "purchase_orders": [
+    {
+      "arrives_on_day": 30,
+      "units": 20000
+    }
+  ]
+}

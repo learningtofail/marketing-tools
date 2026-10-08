@@ -1,0 +1,162 @@
+[
+ {
+  "tool": "quality-score-scorer",
+  "file": "01-happy-travel-tuscany-villa.json",
+  "must": [
+   "Copy readiness 100 out of 100",
+   "not Google's Quality Score"
+  ],
+  "mustnot": [
+   "Estimated Quality Score"
+  ],
+  "setup": {
+   "nofile": true,
+   "selects": {
+    "#chk_0": "y",
+    "#chk_1": "y",
+    "#chk_2": "y",
+    "#chk_3": "y",
+    "#chk_4": "y",
+    "#chk_5": "y",
+    "#chk_6": "y",
+    "#chk_7": "y",
+    "#chk_8": "y",
+    "#chk_9": "y",
+    "#chk_10": "y"
+   }
+  }
+ },
+ {
+  "tool": "quality-score-scorer",
+  "file": "02-messy-healthcare-quebec-dental-fr.json",
+  "must": [
+   "Policy approval is not assessed"
+  ],
+  "mustnot": [
+   "Estimated Quality Score",
+   "Use a relevant display path and URL slug"
+  ],
+  "setup": {
+   "nofile": true,
+   "selects": {
+    "#chk_0": "y",
+    "#chk_1": "y",
+    "#chk_2": "y",
+    "#chk_4": "y",
+    "#chk_5": "y",
+    "#chk_6": "y",
+    "#chk_7": "y",
+    "#chk_8": "y",
+    "#chk_9": "y"
+   }
+  }
+ },
+ {
+  "tool": "quality-score-scorer",
+  "file": "02b-control-english-twin-of-dental-page.json",
+  "must": [
+   "Policy approval is not assessed"
+  ],
+  "mustnot": [
+   "Use a relevant display path and URL slug"
+  ],
+  "setup": {
+   "nofile": true,
+   "selects": {
+    "#chk_0": "y",
+    "#chk_1": "y",
+    "#chk_2": "y",
+    "#chk_4": "y",
+    "#chk_5": "y",
+    "#chk_6": "y",
+    "#chk_7": "y",
+    "#chk_8": "y",
+    "#chk_9": "y"
+   }
+  }
+ },
+ {
+  "tool": "quality-score-scorer",
+  "file": "03-trap-healthcare-claims-keyword-stuffed-doorway.json",
+  "must": [
+   "Policy review needed before anything else",
+   "capped at 30",
+   "far too often"
+  ],
+  "mustnot": [
+   "Copy readiness 100",
+   "10 out of 10"
+  ],
+  "setup": {
+   "nofile": true,
+   "selects": {
+    "#chk_0": "y",
+    "#chk_1": "y",
+    "#chk_2": "y",
+    "#chk_3": "y",
+    "#chk_4": "y",
+    "#chk_5": "y",
+    "#chk_6": "y",
+    "#chk_7": "y",
+    "#chk_8": "y",
+    "#chk_9": "y",
+    "#chk_10": "y"
+   }
+  }
+ },
+ {
+  "tool": "quality-score-scorer",
+  "file": "04-same-as-happy-but-no-boxes-ticked.json",
+  "must": [
+   "from text checks only",
+   "Not assessed",
+   "11 checks not assessed"
+  ],
+  "mustnot": [
+   "Fail"
+  ],
+  "setup": {
+   "nofile": true
+  }
+ },
+ {
+  "tool": "quality-score-scorer",
+  "file": "05-stemming-edge-cases-ecommerce-shoes.json",
+  "must": [
+   "Exact keyword appears in a headline (singular or plural)"
+  ],
+  "mustnot": [
+   "Rewrite the H1 to include the keyword",
+   "Add the keyword to the page title",
+   "Include every keyword word in the headlines",
+   "Use a relevant display path and URL slug"
+  ],
+  "setup": {
+   "nofile": true,
+   "selects": {
+    "#chk_0": "y",
+    "#chk_1": "y",
+    "#chk_2": "y",
+    "#chk_4": "y",
+    "#chk_5": "y",
+    "#chk_6": "y",
+    "#chk_7": "y",
+    "#chk_8": "y",
+    "#chk_9": "y"
+   }
+  }
+ },
+ {
+  "tool": "quality-score-scorer",
+  "file": "06-keyword-only.json",
+  "must": [
+   "Nothing to check yet"
+  ],
+  "mustnot": [
+   "Copy readiness"
+  ],
+  "setup": {
+   "nofile": true
+  }
+ }
+]

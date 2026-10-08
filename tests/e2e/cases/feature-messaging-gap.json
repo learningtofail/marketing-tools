@@ -1,0 +1,91 @@
+[
+ {
+  "tool": "feature-messaging-gap",
+  "file": "01-auto-marketplace.json",
+  "must": [
+   "of 8 features appear in the copy",
+   "1 missing entirely",
+   "Virtual 360 degree photo tours"
+  ],
+  "mustnot": [
+   "of 18 features"
+  ],
+  "setup": {
+   "nofile": true
+  }
+ },
+ {
+  "tool": "feature-messaging-gap",
+  "file": "02-nonprofit-messy.json",
+  "must": [
+   "of 8 features appear in the copy",
+   "Lines left out (10)",
+   "Duplicate of an earlier line",
+   "Sub-bullet of the line above",
+   "Under a bug fix, internal or known-issues heading"
+  ],
+  "mustnot": [
+   "of 18 features",
+   "15 missing"
+  ],
+  "setup": {
+   "nofile": true
+  }
+ },
+ {
+  "tool": "feature-messaging-gap",
+  "file": "03-ecommerce-benefit-leak.json",
+  "must": [
+   "0 with benefit wording",
+   "One-word match, check"
+  ],
+  "mustnot": [
+   "6 with a benefit",
+   "with benefit wording; 6"
+  ],
+  "setup": {
+   "nofile": true
+  }
+ },
+ {
+  "tool": "feature-messaging-gap",
+  "file": "04-bilingual-french.json",
+  "must": [
+   "French text detected",
+   "Read every Missing and Feature only row yourself"
+  ],
+  "mustnot": [
+   "100% of 5 features"
+  ],
+  "setup": {
+   "nofile": true
+  }
+ },
+ {
+  "tool": "feature-messaging-gap",
+  "file": "05-stemmer-filler.json",
+  "must": [
+   "100% of 5 features appear in the copy; 5 with benefit wording",
+   "0 missing entirely"
+  ],
+  "mustnot": [
+   "4 missing entirely"
+  ],
+  "setup": {
+   "nofile": true
+  }
+ },
+ {
+  "tool": "feature-messaging-gap",
+  "file": "06-notes-only.json",
+  "must": [
+   "Paste both texts"
+  ],
+  "mustnot": [
+   "features appear in the copy"
+  ],
+  "setup": {
+   "nofile": true
+  }
+ }
+]

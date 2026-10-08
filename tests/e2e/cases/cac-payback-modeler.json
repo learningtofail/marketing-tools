@@ -1,0 +1,60 @@
+[
+ {
+  "tool": "cac-payback-modeler",
+  "file": "a-saas-happy.json",
+  "must": [
+   "Cash payback in 6.2 months",
+   "4.10"
+  ],
+  "mustnot": [
+   "Not paid back",
+   "0.00x"
+  ],
+  "setup": {
+   "nofile": true
+  }
+ },
+ {
+  "tool": "cac-payback-modeler",
+  "file": "b-subscription-box-messy.json",
+  "must": [
+   "13.1 months",
+   "1.72"
+  ],
+  "mustnot": [],
+  "setup": {
+   "nofile": true,
+   "curve": "curve-paste-tab-separated-percent.txt"
+  }
+ },
+ {
+  "tool": "cac-payback-modeler",
+  "file": "b-subscription-box-messy.json",
+  "must": [
+   "13.1 months",
+   "read as fractions"
+  ],
+  "mustnot": [],
+  "setup": {
+   "nofile": true,
+   "curve": "curve-fractions-wrong-units.txt"
+  }
+ },
+ {
+  "tool": "cac-payback-modeler",
+  "file": "c-marketplace-organic-mix-trap.json",
+  "must": [
+   "6.1 months",
+   "5.4 months"
+  ],
+  "mustnot": [
+   "Cash payback in 1.5 months"
+  ],
+  "setup": {
+   "nofile": true,
+   "fields": {
+    "pcust": "18"
+   }
+  }
+ }
+]

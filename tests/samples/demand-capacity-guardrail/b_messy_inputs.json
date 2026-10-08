@@ -1,0 +1,22 @@
+{
+  "scenario": "Same business as A but the history was pasted from an Excel export in a French-Canadian locale (decimal commas, blank rows, stock-out zeros, CRLF, a note row, N/A)",
+  "fields": {
+    "inv": 13000,
+    "cap": 700,
+    "safe": 500,
+    "hor": 45,
+    "base": 300,
+    "lift": 50,
+    "ps": 7,
+    "pd": 7,
+    "spend": 2000,
+    "cpa": 30,
+    "upo": 1.3
+  },
+  "purchase_orders": [
+    {
+      "arrives_on_day": 20,
+      "units": 5000
+    }
+  ]
+}
